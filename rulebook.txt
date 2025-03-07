@@ -1,0 +1,221 @@
+==============================================================================
+  UNIQUE POKER GAME RULEBOOK (ASCII VERSION) - REVISED
+==============================================================================
+
+This document outlines the complete rules for the Unique Poker Game.
+Please read this carefully to understand the game mechanics.
+
+------------------------------------------------------------------------------
+I. GAME SETUP
+------------------------------------------------------------------------------
+
+  1. DECK:
+     - A standard 52-card deck is used, with ranks from 2 to Ace (A, K, Q, J, 10, 9, 8, 7, 6, 5, 4, 3, 2) and four suits (Spades, Hearts, Diamonds, Clubs). Suit ranking is not relevant in this game.
+
+  2. PLAYERS PER TABLE:
+     - Each table can accommodate multiple players (e.g., 2-8 players, to be configurable in your system).
+
+  3. THE BUTTON (DEALER):
+     - At the start of each game, a player is designated as the "Button" (Dealer).
+     - The Button position rotates clockwise to the next active player after each hand.
+
+  4. CHIPS/CURRENCY:
+     - Players use chips or a virtual currency to participate in the game.
+     - Define the Ante amount and minimum table buy-in as needed for your game economy.
+
+  5. TABLE-SPECIFIC PARAMETERS:
+     - The following parameters can be configured per table:
+        i. Discard Phase Duration: Time allowed for discard decision (default: 3 seconds).
+        ii. Discard Cost Type: Method to calculate discard cost (see section V.3).
+        iii. Continuation Bet Multiplier: Multiple of Ante for Continuation Bet (e.g., 2x, 3x).
+
+------------------------------------------------------------------------------
+II. GAMEPLAY - HAND FLOW (PER HAND)
+------------------------------------------------------------------------------
+
+  A. ANTE:
+     - Before each hand begins, every player at the table must place a mandatory "Ante" bet into the pot.
+     - The Ante amount is a predefined value for each table.
+
+  B. HOLE CARDS:
+     - Once Antes are collected, the Button (Dealer) deals TWO private "Hole Cards" face down to each player, starting with the player to the left of the Button and proceeding clockwise.
+
+  C. CONTINUATION BET:
+     - After receiving their Hole Cards, each player must choose to either:
+        i. PAY the "Continuation Bet":  Pay an amount equal to the Continuation Bet Multiplier (defined per table) times the Ante. This amount is calculated as:  (Continuation Bet Multiplier) * Ante.
+        ii. FOLD: Forfeit their hand and Ante. They are no longer part of this hand and lose their Ante.
+     - Players decide in turn, starting with the player to the left of the Button.
+
+  D. COMMUNITY CARDS DEAL (INITIAL):
+     - After the Continuation Bet phase, the Button deals EIGHT "Community Cards" face up in the center of the table. These cards are shared by all players remaining in the hand.
+
+  E. DISCARD PHASE (OPTIONAL):
+     - Immediately after the 8 Community Cards are dealt, a "Discard Phase" begins.
+     - DURATION:  Table-specific duration (default: 3 seconds).
+     - ACTION: Each player has the option to discard ONE of the 8 Community Cards.
+     - COST: Discarding a card has a table-specific cost (see Section V.3 for cost types). This cost is added to the pot.
+     - PROCESS: Players, in turn (starting from left of Button), can choose to discard a community card.
+     - If a player chooses NOT to discard or fails to select a card within the Discard Phase Duration, they take no action and the phase moves to the next player or ends.
+     - Discarded cards are removed from play and are no longer available for selection.
+
+  F. COMMUNITY CARD PHASE & CARD SELECTION:
+     - Following the (optional) Discard Phase, the "Community Card Phase" begins.
+     - DYNAMIC REVEAL:  The 8 (or fewer if cards were discarded) Community Cards are revealed in timed waves:
+        i. WAVE 1 (T=0 seconds): The first THREE Community Cards are revealed immediately at the start of the phase.
+        ii. WAVE 2 (T=5 seconds): Five seconds after Wave 1, the next THREE Community Cards are revealed.
+        iii. WAVE 3 (T=8 seconds): Three seconds after Wave 2, the final TWO Community Cards are revealed.
+     - SELECTION TIMER: Players have a total of 10 seconds from the start of Wave 1 to select their cards. The selection phase ends at T=10 seconds.
+     - CARD SELECTION: Each player MUST choose exactly THREE cards from the Community Cards to form their 5-card hand (using their 2 Hole Cards and 3 selected Community Cards).
+     - LOCK-IN: Once a Community Card is selected, it is locked in. Players CANNOT unselect or change their selection.
+     - TIME LIMIT: If a player fails to select 3 cards within the 10-second timer, the system will RANDOMLY select 3 Community Cards for them to complete their hand.
+     - Selection happens simultaneously for all players during the 10-second window.
+
+  G. HAND REVEAL:
+     - After the 10-second selection timer ends, all players who are still in the hand reveal their 5-card hands (2 Hole Cards + 3 Selected Community Cards).
+
+  H. HAND EVALUATION & WINNER(S):
+     - The best 5-card poker hand among all players still in the hand wins the pot.
+     - HAND RANKINGS (from highest to lowest - standard poker rankings):
+        1. Royal Flush (10, J, Q, K, A of the same suit)
+        2. Straight Flush (5 consecutive ranks of the same suit)
+        3. 4 of a Kind (4 cards of the same rank)
+        4. Full House (3 cards of one rank and 2 cards of another rank)
+        5. Flush (5 cards of the same suit, not in sequence)
+        6. Straight (5 cards in sequence, not of the same suit)
+        7. 3 of a Kind (3 cards of the same rank)
+        8. Two Pair (2 cards of one rank and 2 cards of another rank)
+        9. One Pair (2 cards of the same rank)
+        10. High Card (No pair or better)
+     - Compare each player's best 5-card hand using these rankings to determine the winner(s).
+
+  I. PAYOUT DISTRIBUTION:
+     - The pot is distributed based on hand rankings as follows:
+        i. 1st Best Hand: Receives 80% of the total pot.
+        ii. 2nd Best Hand: Receives 20% of the total pot.
+
+  J. DRAW RESOLUTION (TIE-BREAKERS):
+     - In case of a tie in hand rank between two or more players, the following tie-breaker rules are applied in order:
+        i. KICKER CARDS: Compare the "kicker" cards in the hands (the cards not involved in making the hand rank) to determine the higher hand.
+        ii. HIGHEST HOLE CARD: If hands are still tied after kicker comparison, the player with the highest ranked SINGLE Hole Card among the tied players is declared the winner.
+        iii. If STILL TIED (extremely rare): The pot is split evenly between the tied players for the winning positions (1st and/or 2nd place).
+
+  K. BUTTON MOVEMENT:
+     - After a hand is completed and payouts are distributed, the Button moves clockwise to the next active player at the table.
+
+  L. NEW HAND:
+     - The next hand begins with step A (Ante) and continues until payout.
+
+------------------------------------------------------------------------------
+III. BETTING RULES (DETAILED)
+------------------------------------------------------------------------------
+
+  1. ANTE AMOUNT:
+     - The Ante amount is a fixed value determined by the table stakes.  Example: 1 chip, 10 chips, etc.
+
+  2. CONTINUATION BET AMOUNT:
+     - The Continuation Bet is calculated as: (Continuation Bet Multiplier) * Ante.
+     - The Continuation Bet Multiplier is defined per table.
+
+  3. BETTING ACTIONS:
+     - During the Continuation Bet phase, players have two possible actions:
+        i. CONTINUE (PAY): Pay the Continuation Bet amount to remain in the hand.
+        ii. FOLD: Forfeit their hand and lose their Ante.
+
+  4. CONSEQUENCES OF FOLDING:
+     - A player who folds forfeits their Ante and is no longer involved in the current hand. They cannot win any part of the pot.
+
+------------------------------------------------------------------------------
+IV. COMMUNITY CARD PHASE & SELECTION PROCESS (DETAILED)
+------------------------------------------------------------------------------
+
+  1. INITIAL COMMUNITY CARDS:
+     - 8 Community Cards are dealt face up at the start of the Community Card Phase (after Continuation Bets and potentially after Discard Phase).
+
+  2. TIMED REVEAL WAVES:
+     - Wave 1: Cards 1, 2, 3 are revealed at T=0 seconds.
+     - Wave 2: Cards 4, 5, 6 are revealed at T=5 seconds.
+     - Wave 3: Cards 7, 8 (or fewer if discarded) are revealed at T=8 seconds.
+     - Time starts counting from the beginning of the Community Card Phase.
+     - Selection Phase ends at T=10 seconds.
+
+  3. 10-SECOND SELECTION TIMER:
+     - The selection timer starts simultaneously with Wave 1 reveal and ends 10 seconds after phase start.
+
+  4. SELECTING 3 CARDS:
+     - Players must select exactly THREE Community Cards from the available face-up cards within the 10-second timer.
+     - Selection is done via clicking or tapping on the desired cards (interface implementation detail).
+
+  5. LOCKED SELECTION:
+     - Once a card is selected by a player, it is immediately marked as selected for that player and cannot be unselected. Players should confirm their selections quickly.
+
+  6. RANDOM SELECTION ON TIMEOUT:
+     - If a player does not manually select 3 cards within the 10-second timer, the game system will automatically and randomly select 3 cards from the available Community Cards for that player.
+
+------------------------------------------------------------------------------
+V. DISCARD PHASE (DETAILED)
+------------------------------------------------------------------------------
+
+  1. TIMING:
+     - The Discard Phase occurs immediately after the initial 8 Community Cards are dealt and BEFORE the Community Card Selection Phase begins.
+
+  2. DURATION:
+     - Table-specific duration, configurable per table (default: 3 seconds). Each player has up to this duration to make a discard decision when it is their turn.
+
+  3. DISCARD COST TYPES (TABLE-SPECIFIC CONFIGURATION):
+     - The cost to discard a Community Card is determined by the table's Discard Cost Type setting. Possible types are:
+        i. FIXED AMOUNT: A predetermined chip amount, regardless of Ante or Pot. (e.g., 5 chips)
+        ii. MULTIPLE OF ANTE:  A multiplier applied to the table's Ante value. (e.g., 1x Ante, 2x Ante)
+        iii. MULTIPLE OF PLAYER'S BET: A multiplier applied to the player's total bet so far in the current hand (Ante + Continuation Bet). (e.g., 0.5x Player's Bet, 1x Player's Bet)
+        iv. MULTIPLE OF TOTAL POT: A multiplier applied to the current total pot size. (e.g., 0.1x Pot, 0.05x Pot)
+     - The specific Discard Cost Type and its associated value/multiplier are defined per table settings.
+
+  4. CARD SELECTION FOR DISCARD:
+     - If a player chooses to discard, they must select ONE Community Card from the face-up cards to remove from play.
+     - Selection method is via clicking or tapping (interface implementation detail).
+
+  5. NO MANDATORY DISCARD:
+     - Players are NOT required to discard a card. They can choose to skip the Discard Phase and pay no discard cost.
+
+  6. TURN-BASED DISCARD:
+     - Discard decisions are made in turn, starting from the player to the left of the Button and proceeding clockwise.
+
+  7. DISCARDED CARD REMOVAL:
+     - Once a Community Card is discarded by a player, it is immediately removed from the table and is no longer available for selection by any player in the Community Card Selection Phase.
+
+------------------------------------------------------------------------------
+VI. HAND RANKINGS (STANDARD POKER)
+------------------------------------------------------------------------------
+
+  (Refer to Section II.H. Hand Evaluation & Winner(s) for the list of hand rankings)
+
+------------------------------------------------------------------------------
+VII. PAYOUT STRUCTURE (DETAILED)
+------------------------------------------------------------------------------
+
+  1. POT DISTRIBUTION:
+     - 1st Place Hand: 80% of the total pot.
+     - 2nd Place Hand: 20% of the total pot.
+     - NO REMAINING POT IS CARRIED OVER. The entire pot is distributed in each hand.
+
+  2. POT ACCUMULATION:
+     - The pot is accumulated from:
+        - Antes from all players at the start of the hand.
+        - Continuation Bets from players who choose to continue.
+        - Discard Costs from players who choose to discard a Community Card.
+
+------------------------------------------------------------------------------
+VIII. DRAW RESOLUTION (DETAILED)
+------------------------------------------------------------------------------
+
+  (Refer to Section II.J. Draw Resolution (Tie-breakers) for detailed tie-breaker rules)
+
+------------------------------------------------------------------------------
+IX. THE BUTTON MOVEMENT (DETAILED)
+------------------------------------------------------------------------------
+
+  - After each hand, the Button moves one position clockwise to the next player who is still active at the table.
+  - If a player leaves the table or becomes inactive, the Button still moves to the next ACTIVE player in clockwise order.
+
+------------------------------------------------------------------------------
+END OF RULEBOOK
+------------------------------------------------------------------------------
