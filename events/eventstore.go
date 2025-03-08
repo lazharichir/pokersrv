@@ -29,31 +29,8 @@ func (s *InMemoryEventStore) Append(event Event) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	// Get tableID from the event based on its type
-	var tableID string
-	switch e := event.(type) {
-	case HandStarted:
-		tableID = e.TableID
-	case AntePlacedByPlayer:
-		tableID = e.TableID
-	case PlayerHoleCardDealt:
-		tableID = e.TableID
-	case ContinuationBetPlaced:
-		tableID = e.TableID
-	case PlayerFolded:
-		tableID = e.TableID
-	case CommunityCardsDealt:
-		tableID = e.TableID
-	case CardDiscarded:
-		tableID = e.TableID
-	case CommunityCardSelected:
-		tableID = e.TableID
-	case HandCompleted:
-		tableID = e.TableID
-	default:
-		return fmt.Errorf("unknown event type: %T", e)
-	}
-
+	// Extract tableID from the event
+	tableID := GetTableID(event)
 	if tableID == "" {
 		return fmt.Errorf("event has no tableID")
 	}
@@ -80,4 +57,15 @@ func (s *InMemoryEventStore) LoadEvents(tableID string) ([]Event, error) {
 
 	// Return empty slice if no events found
 	return []Event{}, nil
+}
+
+func (s *InMemoryEventStore) GetEvents() []Event {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	var events []Event
+	for _, e := range s.events {
+		events = append(events, e...)
+	}
+	return events
 }

@@ -7,7 +7,7 @@ import (
 
 	"github.com/lazharichir/poker/cards"
 	"github.com/lazharichir/poker/domain"
-	"github.com/lazharichir/poker/domain/events"
+	"github.com/lazharichir/poker/events"
 )
 
 // GamePhase represents the current phase of a hand
@@ -24,6 +24,15 @@ const (
 	PhaseHandCompleted   GamePhase = "hand_completed"
 )
 
+func (phase GamePhase) Equal(other GamePhase) bool {
+	return phase == other
+}
+
+// EventApplier defines the interface for applying events to a table state
+type EventApplier interface {
+	ApplyEvent(event events.Event, table *domain.Table)
+}
+
 // TableEngine handles the game logic and generates domain events
 type TableEngine struct {
 	eventStore           events.EventStore
@@ -36,29 +45,74 @@ type TableEngine struct {
 
 // NewTableEngine creates a new table engine with the given event store
 func NewTableEngine(eventStore events.EventStore, tableID string) (*TableEngine, error) {
-	// Load existing events to rebuild state
-	tableEvents, err := eventStore.LoadEvents(tableID)
+	// Create a new table engine
+	engine := &TableEngine{
+		eventStore: eventStore,
+		phase:      PhaseNotStarted,
+		deck:       []cards.Card{},
+	}
+
+	// Rehydrate the table state from events
+	table, err := engine.RehydrateTableState(tableID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to rehydrate table state: %w", err)
+	}
+
+	engine.tableState = table
+	return engine, nil
+}
+
+// RehydrateTableState reconstructs a Table state from its event history
+func (te *TableEngine) RehydrateTableState(tableID string) (*domain.Table, error) {
+	events, err := te.eventStore.LoadEvents(tableID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load events: %w", err)
 	}
-	_ = tableEvents
 
-	// Create a default table as starting point
-	table := &domain.Table{
-		ID:      tableID,
-		Players: make(map[string]*domain.Player),
+	// Create empty table state with default values
+	table := domain.NewTable(
+		tableID,
+		"", // Name will be set by events if available
+		0,  // Default ante
+		2,  // Default continuation bet multiplier
+		10, // Default discard phase duration
+		"fixed",
+		0, // Default discard cost
+	)
+
+	// Apply all events in order to rebuild the state
+	for _, event := range events {
+		te.applyEvent(event, table)
 	}
 
-	// Apply events to rebuild state (this would be handled by event handlers in Phase 5)
-	// For now, we'll just create a new table engine with default values
+	return table, nil
+}
 
-	return &TableEngine{
-		eventStore:    eventStore,
-		tableState:    table,
-		phase:         PhaseNotStarted,
-		deck:          []cards.Card{},
-		activePlayers: []string{},
-	}, nil
+// applyEvent dispatches events to their appropriate handlers
+func (te *TableEngine) applyEvent(event events.Event, table *domain.Table) {
+	switch e := event.(type) {
+	case events.HandStarted:
+		te.applyHandStartedEvent(e, table)
+	case events.AntePlacedByPlayer:
+		te.applyAntePlacedByPlayerEvent(e, table)
+	case events.PlayerHoleCardDealt:
+		te.applyPlayerHoleCardDealtEvent(e, table)
+	case events.ContinuationBetPlaced:
+		te.applyContinuationBetPlacedEvent(e, table)
+	case events.PlayerFolded:
+		te.applyPlayerFoldedEvent(e, table)
+	case events.CommunityCardsDealt:
+		te.applyCommunityCardsDealtEvent(e, table)
+	case events.CardDiscarded:
+		te.applyCardDiscardedEvent(e, table)
+	case events.CommunityCardSelected:
+		te.applyCommunityCardSelectedEvent(e, table)
+	case events.HandCompleted:
+		te.applyHandCompletedEvent(e, table)
+	default:
+		// Log unknown event type
+		fmt.Printf("Warning: Unknown event type %T\n", e)
+	}
 }
 
 // StartHand starts a new hand at the table
@@ -72,7 +126,7 @@ func (te *TableEngine) StartHand() error {
 	}
 
 	// Prepare a new deck
-	te.deck = cards.ShuffleDeck(cards.NewDeck())
+	te.deck = cards.ShuffleCards(cards.NewDeck52())
 
 	// Choose button position (in a real implementation, rotate from previous hand)
 	// For now, pick the first player as the button
@@ -86,7 +140,7 @@ func (te *TableEngine) StartHand() error {
 	// Initialize active players (everyone starts active)
 	te.activePlayers = playerIDs
 
-	// Create and store HandStarted event
+	// Create HandStarted event
 	handStartedEvent := events.HandStarted{
 		TableID:        te.tableState.ID,
 		ButtonPlayerID: buttonPlayerID,
@@ -94,9 +148,11 @@ func (te *TableEngine) StartHand() error {
 		PlayerIDs:      playerIDs,
 	}
 
+	// Append and apply the event
 	if err := te.eventStore.Append(handStartedEvent); err != nil {
 		return fmt.Errorf("failed to append HandStarted event: %w", err)
 	}
+	te.applyEvent(handStartedEvent, te.tableState)
 
 	// Move to ante collection phase
 	te.phase = PhaseAnteCollection
@@ -125,15 +181,13 @@ func (te *TableEngine) PlaceAnte(playerID string) error {
 		Amount:   te.tableState.Ante,
 	}
 
+	// Append and apply the event
 	if err := te.eventStore.Append(antePlacedEvent); err != nil {
 		return fmt.Errorf("failed to append AntePlacedByPlayer event: %w", err)
 	}
+	te.applyEvent(antePlacedEvent, te.tableState)
 
 	// Check if all active players have placed antes
-	// In a real implementation, this would be tracked via event handlers
-	// For now, we'll assume all antes are collected when this function is called for all players
-	// and the last ante triggers moving to the next phase
-
 	// If this was the last player to place ante, deal hole cards
 	if playerID == te.activePlayers[len(te.activePlayers)-1] {
 		return te.dealHoleCards()
@@ -157,9 +211,12 @@ func (te *TableEngine) dealHoleCards() error {
 			PlayerID: playerID,
 			Card:     card1,
 		}
+
+		// Append and apply the event
 		if err := te.eventStore.Append(event1); err != nil {
 			return fmt.Errorf("failed to append PlayerHoleCardDealt event: %w", err)
 		}
+		te.applyEvent(event1, te.tableState)
 
 		// Deal second card
 		card2, remainingDeck := cards.DealCard(te.deck)
@@ -170,9 +227,12 @@ func (te *TableEngine) dealHoleCards() error {
 			PlayerID: playerID,
 			Card:     card2,
 		}
+
+		// Append and apply the event
 		if err := te.eventStore.Append(event2); err != nil {
 			return fmt.Errorf("failed to append PlayerHoleCardDealt event: %w", err)
 		}
+		te.applyEvent(event2, te.tableState)
 	}
 
 	// Move to continuation bet phase
@@ -208,9 +268,11 @@ func (te *TableEngine) PlaceContinuationBet(playerID string) error {
 		Amount:   continuationBetAmount,
 	}
 
+	// Append and apply the event
 	if err := te.eventStore.Append(continuationBetEvent); err != nil {
 		return fmt.Errorf("failed to append ContinuationBetPlaced event: %w", err)
 	}
+	te.applyEvent(continuationBetEvent, te.tableState)
 
 	// Move to next player
 	te.currentPlayerTurnIdx++
@@ -239,9 +301,11 @@ func (te *TableEngine) Fold(playerID string) error {
 		PlayerID: playerID,
 	}
 
+	// Append and apply the event
 	if err := te.eventStore.Append(foldedEvent); err != nil {
 		return fmt.Errorf("failed to append PlayerFolded event: %w", err)
 	}
+	te.applyEvent(foldedEvent, te.tableState)
 
 	// Remove player from active players
 	// In event sourcing, this would be handled by an event handler
@@ -260,9 +324,11 @@ func (te *TableEngine) Fold(playerID string) error {
 			SecondPrize:   0,
 		}
 
+		// Append and apply the event
 		if err := te.eventStore.Append(handCompletedEvent); err != nil {
 			return fmt.Errorf("failed to append HandCompleted event: %w", err)
 		}
+		te.applyEvent(handCompletedEvent, te.tableState)
 
 		te.phase = PhaseHandCompleted
 		return nil
@@ -293,9 +359,11 @@ func (te *TableEngine) dealCommunityCards() error {
 		Cards:   communityCards,
 	}
 
+	// Append and apply the event
 	if err := te.eventStore.Append(communityCardsEvent); err != nil {
 		return fmt.Errorf("failed to append CommunityCardsDealt event: %w", err)
 	}
+	te.applyEvent(communityCardsEvent, te.tableState)
 
 	// Move to discard phase
 	te.phase = PhaseDiscard
@@ -352,9 +420,11 @@ func (te *TableEngine) DiscardCard(playerID string, cardIndex int) error {
 		DiscardFee: discardFee,
 	}
 
+	// Append and apply the event
 	if err := te.eventStore.Append(discardEvent); err != nil {
 		return fmt.Errorf("failed to append CardDiscarded event: %w", err)
 	}
+	te.applyEvent(discardEvent, te.tableState)
 
 	// Remove the discarded card
 	// In event sourcing, this would be handled by event handlers
@@ -473,14 +543,11 @@ func (te *TableEngine) SelectCommunityCard(playerID string, cardIndex int) error
 		Card:     selectedCard,
 	}
 
+	// Append and apply the event
 	if err := te.eventStore.Append(selectEvent); err != nil {
 		return fmt.Errorf("failed to append CommunityCardSelected event: %w", err)
 	}
-
-	// Update player's selected cards
-	// In event sourcing, this would be handled by event handlers
-	// For now, we'll update the state directly
-	player.SelectedCommunityCards = append(player.SelectedCommunityCards, selectedCard)
+	te.applyEvent(selectEvent, te.tableState)
 
 	return nil
 }
@@ -516,8 +583,9 @@ func (te *TableEngine) evaluateHands() {
 		SecondPrize:   secondPrize,
 	}
 
-	// Append the event
-	_ = te.eventStore.Append(handCompletedEvent) // Error handling omitted for brevity
+	// Append and apply the event
+	_ = te.eventStore.Append(handCompletedEvent)
+	te.applyEvent(handCompletedEvent, te.tableState)
 
 	// Move to completed phase
 	te.phase = PhaseHandCompleted

@@ -5,27 +5,27 @@ import (
 	"time"
 )
 
-// NewDeck creates a standard deck of 52 cards
-func NewDeck() Cards {
-	var deck Cards
+// NewDeck52 creates a standard deck of 52 cards
+func NewDeck52() Stack {
+	var deck Stack
 	suits := []Suit{Spades, Hearts, Diamonds, Clubs}
 	values := []Value{Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King}
 
 	for _, suit := range suits {
 		for _, value := range values {
-			deck = append(deck, Card{Suit: suit, Value: value})
+			deck.AddCard(Card{Suit: suit, Value: value})
 		}
 	}
 
 	return deck
 }
 
-// ShuffleDeck shuffles a deck of cards randomly
-func ShuffleDeck(deck []Card) []Card {
+// ShuffleCards shuffles a deck of cards randomly
+func ShuffleCards(cards []Card) []Card {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	shuffled := make([]Card, len(deck))
-	copy(shuffled, deck)
+	shuffled := make([]Card, len(cards))
+	copy(shuffled, cards)
 
 	r.Shuffle(len(shuffled), func(i, j int) {
 		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]

@@ -5,7 +5,7 @@ import (
 )
 
 func TestNewDeck(t *testing.T) {
-	deck := NewDeck()
+	deck := NewDeck52()
 
 	if len(deck) != 52 {
 		t.Errorf("Expected deck to have 52 cards, got %d", len(deck))
@@ -13,8 +13,8 @@ func TestNewDeck(t *testing.T) {
 }
 
 func TestShuffleDeck(t *testing.T) {
-	originalDeck := NewDeck()
-	shuffledDeck := ShuffleDeck(originalDeck)
+	originalDeck := NewDeck52()
+	shuffledDeck := ShuffleCards(originalDeck)
 
 	// Check same length
 	if len(shuffledDeck) != len(originalDeck) {
@@ -36,7 +36,7 @@ func TestShuffleDeck(t *testing.T) {
 }
 
 func TestDealCard(t *testing.T) {
-	deck := NewDeck()
+	deck := NewDeck52()
 	initialLength := len(deck)
 
 	card, remainingDeck := DealCard(deck)
@@ -52,7 +52,7 @@ func TestDealCard(t *testing.T) {
 }
 
 func TestDealCards(t *testing.T) {
-	deck := NewDeck()
+	deck := NewDeck52()
 	initialLength := len(deck)
 	count := 5
 
