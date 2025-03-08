@@ -8,38 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// a table state can have one of these statuses:
-// - table.waiting
-// - table.playing
-// - table.ended
-
-// a table also contains a list of players, and an ActiveHand struct
-// when an ActiveHand is finished, it's added to the table.Hands slice
-
-// the Hand struct contains the following fields:
-// - ID string
-// - TableID string
-// - Players []Player
-// - Deck []Deck
-// - CommunityCards []Card
-// - HoleCards map[string][]Card
-// - Pot int
-// - Events []Event
-
-// the Hand has its own behavior, such as:
-// - WhatIsTheNextAction() (Player, ActionName, ExpiryTime)
-// - PlayerPlacedAnte(playerID string, Amount int)
-// - PlayerPlacedBet(playerID string, Amount int)
-// - PlayerDiscarded(playerID string, card Card)
-// - IsPlayerStillInHand(playerID string) bool
-// - GetCurrentState() HandState
-
-// the Player struct contains the following fields:
-// - ID string
-// - Name string
-// - Balance int
-// - Status string
-
 func TestBasicTableFlow(t *testing.T) {
 
 	p1 := Player{

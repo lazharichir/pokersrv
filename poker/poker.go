@@ -2,6 +2,7 @@ package poker
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -371,11 +372,6 @@ func (h *Hand) PlayerFolds(playerID string) error {
 	return nil
 }
 
-func (h *Hand) PlayerDiscardsCard(playerID string, card cards.Card) error {
-
-	return nil
-}
-
 // handleSinglePlayerWin handles case where only one player remains
 func (h *Hand) handleSinglePlayerWin(playerID string) {
 	// Skip to the payout phase directly
@@ -396,21 +392,6 @@ func (h *Hand) handleSinglePlayerWin(playerID string) {
 
 	// End the hand
 	h.TransitionToEndedPhase()
-}
-
-func (h *Hand) Payout() error {
-	// Check if in the correct phase
-	if !h.IsInPhase(HandPhase_Payout) {
-		return errors.New("not in payout phase")
-	}
-
-	// Payout logic
-	// ...
-
-	// Transition
-	h.TransitionToEndedPhase()
-
-	return nil
 }
 
 // getPlayerLeftOfButton returns the player ID to the left of the button
@@ -573,7 +554,7 @@ func (t *Table) PlayerLeaves(playerID string) error {
 // StartPlaying starts the table if there are enough players
 func (t *Table) StartPlaying() error {
 	if len(t.Players) < 2 {
-		return errors.New("need at least 2 players to start")
+		return errors.New("need at least  players to start")
 	}
 
 	if t.Status != TableStatusWaiting {
@@ -690,6 +671,7 @@ func (h *Hand) getNextActiveBettor(currentBettorID string) string {
 
 func (t *Table) setActiveHand(hand *Hand) {
 	t.ActiveHand = hand
+	t.Hands = append(t.Hands, *hand)
 }
 
 func (t *Table) publish(msg Message) {
@@ -722,4 +704,479 @@ type TableStartedMessage struct {
 
 func (m TableStartedMessage) MessageName() string {
 	return "TableStarted"
+}
+
+// InitializeHand initializes a new hand with a fresh deck and activates all players
+func (h *Hand) InitializeHand() {
+	// Initialize a new shuffled deck
+	h.Deck = cards.NewDeck52()
+	h.Deck.Shuffle()
+
+	// Initialize the community cards as empty
+	h.CommunityCards = []cards.Card{}
+
+	// Initialize hole cards map for each player
+	h.HoleCards = make(map[string]cards.Stack)
+
+	// Set all players to active at the start of the hand
+	h.ActivePlayers = make(map[string]bool)
+	for _, player := range h.Players {
+		h.ActivePlayers[player.ID] = true
+		h.HoleCards[player.ID] = []cards.Card{}
+	}
+
+	// Initialize betting maps
+	h.AntesPaid = make(map[string]int)
+	h.ContinuationBets = make(map[string]int)
+	h.DiscardCosts = make(map[string]int)
+
+	// Set the current bettor to the player left of the button
+	h.CurrentBettor = h.getPlayerLeftOfButton()
+
+	// Record event for hand initialization
+	h.Events = append(h.Events, Event{
+		Type:      "hand_initialized",
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"player_count": len(h.Players),
+			"button_pos":   h.ButtonPosition,
+		},
+	})
+}
+
+// BurnCard removes the top card from the deck without revealing it
+func (h *Hand) BurnCard() error {
+	if len(h.Deck) == 0 {
+		return errors.New("no cards left in deck to burn")
+	}
+
+	// Remove top card without using it
+	h.Deck = h.Deck[1:]
+
+	// Record event
+	h.Events = append(h.Events, Event{
+		Type:      "card_burned",
+		Timestamp: time.Now(),
+	})
+
+	return nil
+}
+
+// PrintState is a debugging function to print the current state of the hand in a string, over multiple lines and in a human-readable structured format
+func (h *Hand) PrintState() string {
+	output := "Hand State:\n"
+	output += "--------------------------------------------------\n"
+	output += "ID: " + h.ID + "\n"
+	output += "Phase: " + string(h.Phase) + "\n"
+	output += "TableID: " + h.TableID + "\n"
+	output += "Pot: " + fmt.Sprint(h.Pot) + "\n"
+	output += "CurrentBettor: " + h.CurrentBettor + "\n"
+	output += "ButtonPosition: " + fmt.Sprint(h.ButtonPosition) + "\n"
+	output += "\n"
+
+	output += "Players:\n"
+	for _, player := range h.Players {
+		output += "  - ID: " + player.ID + ", Name: " + player.Name + ", Chips: " + fmt.Sprint(player.Chips) + "\n"
+	}
+	output += "\n"
+
+	output += "Active Players:\n"
+	for playerID, active := range h.ActivePlayers {
+		output += "  - ID: " + playerID + ", Active: " + fmt.Sprint(active) + "\n"
+	}
+	output += "\n"
+
+	output += "Hole Cards:\n"
+	for playerID, cards := range h.HoleCards {
+		output += "  - Player: " + playerID + ", Cards: " + cards.String() + "\n"
+	}
+	output += "\n"
+
+	output += "Community Cards: " + h.CommunityCards.String() + "\n"
+	output += "\n"
+
+	output += "Antes Paid:\n"
+	for playerID, amount := range h.AntesPaid {
+		output += "  - Player: " + playerID + ", Amount: " + fmt.Sprint(amount) + "\n"
+	}
+	output += "\n"
+
+	output += "Continuation Bets:\n"
+	for playerID, amount := range h.ContinuationBets {
+		output += "  - Player: " + playerID + ", Amount: " + fmt.Sprint(amount) + "\n"
+	}
+	output += "\n"
+
+	output += "Discard Costs:\n"
+	for playerID, amount := range h.DiscardCosts {
+		output += "  - Player: " + playerID + ", Amount: " + fmt.Sprint(amount) + "\n"
+	}
+	output += "\n"
+
+	output += "Events:\n"
+	for _, event := range h.Events {
+		output += "  - Type: " + event.Type + ", PlayerID: " + event.PlayerID + ", Timestamp: " + event.Timestamp.String() + "\n"
+	}
+	output += "\n"
+
+	output += "--------------------------------------------------\n"
+
+	return output
+}
+
+// DealHoleCards deals two cards to each active player, one card at a time
+func (h *Hand) DealHoleCards() error {
+	if !h.IsInPhase(HandPhase_Hole) {
+		return errors.New("not in hole card phase")
+	}
+
+	// First round of dealing (first card to each player)
+	for i := 0; i < len(h.Players); i++ {
+		// Start with player to left of button and go around
+		pos := (h.ButtonPosition + 1 + i) % len(h.Players)
+		playerID := h.Players[pos].ID
+
+		// Only deal to active players
+		if h.ActivePlayers[playerID] {
+			if len(h.Deck) == 0 {
+				return errors.New("no cards left in deck")
+			}
+
+			// Deal one card
+			card := h.Deck[0]
+			h.Deck = h.Deck[1:] // Remove card from deck
+			h.HoleCards[playerID] = append(h.HoleCards[playerID], card)
+		}
+	}
+
+	// Second round of dealing (second card to each player)
+	for i := 0; i < len(h.Players); i++ {
+		pos := (h.ButtonPosition + 1 + i) % len(h.Players)
+		playerID := h.Players[pos].ID
+
+		// Only deal to active players
+		if h.ActivePlayers[playerID] {
+			if len(h.Deck) == 0 {
+				return errors.New("no cards left in deck")
+			}
+
+			// Deal one card
+			card := h.Deck[0]
+			h.Deck = h.Deck[1:] // Remove card from deck
+			h.HoleCards[playerID] = append(h.HoleCards[playerID], card)
+		}
+	}
+
+	// Record event for hole cards dealt
+	h.Events = append(h.Events, Event{
+		Type:      "hole_cards_dealt",
+		Timestamp: time.Now(),
+	})
+
+	return nil
+}
+
+// DealCommunityCard deals a single community card
+func (h *Hand) DealCommunityCard() error {
+	if !h.IsInPhase(HandPhase_CommunityDeal) && !h.IsInPhase(HandPhase_CommunityReveal) {
+		return errors.New("not in community card dealing phase")
+	}
+
+	if len(h.Deck) == 0 {
+		return errors.New("no cards left in deck")
+	}
+
+	// Deal one card
+	card := h.Deck[0]
+	h.Deck = h.Deck[1:]
+	h.CommunityCards = append(h.CommunityCards, card)
+
+	// Record event
+	h.Events = append(h.Events, Event{
+		Type:      "community_card_dealt",
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"card_index": len(h.CommunityCards) - 1,
+		},
+	})
+
+	return nil
+}
+
+// PlayerDiscardsCard allows a player to discard and replace a specific hole card
+func (h *Hand) PlayerDiscardsCard(playerID string, cardIndex int) error {
+	// Check if in the correct phase
+	if !h.IsInPhase(HandPhase_Discard) {
+		return errors.New("not in discard phase")
+	}
+
+	// Check if player is active
+	if !h.IsPlayerActive(playerID) {
+		return errors.New("player is not active in this hand")
+	}
+
+	// Check if it's this player's turn to act
+	if !h.IsPlayerTheCurrentBettor(playerID) {
+		return errors.New("not this player's turn to act")
+	}
+
+	// Check if the card index is valid
+	if cardIndex < 0 || cardIndex >= len(h.HoleCards[playerID]) {
+		return errors.New("invalid card index")
+	}
+
+	// Check if player has already paid discard cost
+	if _, paid := h.DiscardCosts[playerID]; !paid {
+		return errors.New("player has not paid discard cost")
+	}
+
+	// Remove the card from player's hand
+	_ = h.HoleCards[playerID][cardIndex]
+	h.HoleCards[playerID] = append(h.HoleCards[playerID][:cardIndex], h.HoleCards[playerID][cardIndex+1:]...)
+
+	// Deal a replacement card
+	if len(h.Deck) == 0 {
+		return errors.New("no cards left in deck")
+	}
+
+	newCard := h.Deck[0]
+	h.Deck = h.Deck[1:]
+	h.HoleCards[playerID] = append(h.HoleCards[playerID], newCard)
+
+	// Record event
+	h.Events = append(h.Events, Event{
+		Type:      "card_discarded",
+		PlayerID:  playerID,
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"discarded_card_index": cardIndex,
+		},
+	})
+
+	// Move to next player
+	h.CurrentBettor = h.getNextActiveBettor(playerID)
+
+	return nil
+}
+
+// PlayerPaysDiscardCost records a player paying to discard a card
+func (h *Hand) PlayerPaysDiscardCost(playerID string) error {
+	// Check if in the correct phase
+	if !h.IsInPhase(HandPhase_Discard) {
+		return errors.New("not in discard phase")
+	}
+
+	// Check if player is active
+	if !h.IsPlayerActive(playerID) {
+		return errors.New("player is not active in this hand")
+	}
+
+	// Check if it's this player's turn to act
+	if !h.IsPlayerTheCurrentBettor(playerID) {
+		return errors.New("not this player's turn to act")
+	}
+
+	// Check if player has already paid
+	if _, paid := h.DiscardCosts[playerID]; paid {
+		return errors.New("player already paid discard cost")
+	}
+
+	// Record the discard cost
+	cost := h.TableRules.DiscardCostValue
+	h.DiscardCosts[playerID] = cost
+	h.Pot += cost
+
+	// Record event
+	h.Events = append(h.Events, Event{
+		Type:      "discard_cost_paid",
+		PlayerID:  playerID,
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"amount": cost,
+		},
+	})
+
+	return nil
+}
+
+// EvaluateHands evaluates all active players' hands and determines the winner(s)
+func (h *Hand) EvaluateHands() ([]HandComparisonResult, error) {
+	if !h.IsInPhase(HandPhase_HandReveal) {
+		return nil, errors.New("not in hand reveal phase")
+	}
+
+	// Create a map of player ID to their combined hole and community cards
+	playerCards := make(map[string]cards.Stack)
+	for playerID, holeCards := range h.HoleCards {
+		if h.IsPlayerActive(playerID) {
+			// Combine hole cards and community cards
+			combinedCards := append(cards.Stack{}, holeCards...)
+			combinedCards = append(combinedCards, h.CommunityCards...)
+			playerCards[playerID] = combinedCards
+		}
+	}
+
+	// Use the hand evaluator to determine the best hand for each player
+	// (This assumes we have access to the hands package)
+	results, err := h.comparePlayerHands(playerCards)
+	if err != nil {
+		return nil, err
+	}
+
+	// Record event with the results
+	resultData := make([]map[string]interface{}, len(results))
+	for i, result := range results {
+		resultData[i] = map[string]interface{}{
+			"player_id":   result.PlayerID,
+			"hand_rank":   result.HandRank,
+			"is_winner":   result.IsWinner,
+			"place_index": result.PlaceIndex,
+		}
+	}
+
+	h.Events = append(h.Events, Event{
+		Type:      "hands_evaluated",
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"results": resultData,
+		},
+	})
+
+	return results, nil
+}
+
+// Payout distributes the pot to the winner(s)
+func (h *Hand) Payout() error {
+	// Check if in the correct phase
+	if !h.IsInPhase(HandPhase_Payout) {
+		return errors.New("not in payout phase")
+	}
+
+	// Get hand evaluation results
+	results, err := h.EvaluateHands()
+	if err != nil {
+		// If we can't evaluate hands, look for single remaining player
+		var winnerID string
+		winnerCount := 0
+
+		for playerID, active := range h.ActivePlayers {
+			if active {
+				winnerID = playerID
+				winnerCount++
+			}
+		}
+
+		if winnerCount == 1 {
+			// Single player remaining, they win by default
+			return h.payoutToSingleWinner(winnerID)
+		}
+
+		return err
+	}
+
+	// Find winners
+	var winners []string
+	for _, result := range results {
+		if result.IsWinner {
+			winners = append(winners, result.PlayerID)
+		}
+	}
+
+	// If no winners found (shouldn't happen), return error
+	if len(winners) == 0 {
+		return errors.New("no winners found")
+	}
+
+	// Calculate the amount each winner gets (split pot)
+	winAmount := h.Pot / len(winners)
+	remainder := h.Pot % len(winners)
+
+	// Distribute the pot
+	for _, winnerID := range winners {
+		// Find player index
+		playerIndex := -1
+		for i, p := range h.Players {
+			if p.ID == winnerID {
+				playerIndex = i
+				break
+			}
+		}
+
+		if playerIndex != -1 {
+			// Add winnings to player chips
+			h.Players[playerIndex].Chips += winAmount
+
+			// Record event
+			h.Events = append(h.Events, Event{
+				Type:      "pot_awarded",
+				PlayerID:  winnerID,
+				Timestamp: time.Now(),
+				Data: map[string]interface{}{
+					"amount": winAmount,
+				},
+			})
+		}
+	}
+
+	// If there's a remainder due to uneven split, give it to first winner
+	// (usually the player closest to the left of the dealer)
+	if remainder > 0 && len(winners) > 0 {
+		playerIndex := -1
+		for i, p := range h.Players {
+			if p.ID == winners[0] {
+				playerIndex = i
+				break
+			}
+		}
+
+		if playerIndex != -1 {
+			h.Players[playerIndex].Chips += remainder
+		}
+	}
+
+	// Empty the pot
+	h.Pot = 0
+
+	// Transition to ended state
+	h.TransitionToEndedPhase()
+
+	return nil
+}
+
+// payoutToSingleWinner distributes the pot to a single winner
+func (h *Hand) payoutToSingleWinner(winnerID string) error {
+	// Find player index
+	playerIndex := -1
+	for i, p := range h.Players {
+		if p.ID == winnerID {
+			playerIndex = i
+			break
+		}
+	}
+
+	if playerIndex == -1 {
+		return errors.New("winner not found among players")
+	}
+
+	// Add pot to player's chips
+	h.Players[playerIndex].Chips += h.Pot
+
+	// Record event
+	h.Events = append(h.Events, Event{
+		Type:      "pot_awarded",
+		PlayerID:  winnerID,
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"amount": h.Pot,
+			"reason": "last_player_standing",
+		},
+	})
+
+	// Empty the pot
+	h.Pot = 0
+
+	// Transition to ended state
+	h.TransitionToEndedPhase()
+
+	return nil
 }

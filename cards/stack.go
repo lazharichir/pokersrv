@@ -17,6 +17,14 @@ func (stack *Stack) Shuffle() {
 	*stack = Stack(shuffled)
 }
 
+func (stack Stack) String() string {
+	var s string
+	for _, c := range stack {
+		s += c.String() + " "
+	}
+	return s
+}
+
 // NewStack creates a new stack with a given number of cards
 func NewStack(cards ...Card) Stack {
 	return Stack(cards)
