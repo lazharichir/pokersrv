@@ -7,27 +7,14 @@ import (
 
 // Message represents a game event message
 type Message interface {
-	MessageName() string
+	Name() string
 }
 
 // Game represents the poker game server
 type Game struct {
-	tables       map[string]*Table
-	messageQueue []Message
-	listeners    []func(Message)
+	tables    map[string]*Table
+	listeners []func(Message)
 }
-
-// Player represents a player in the game
-type Player struct {
-	ID      string
-	Name    string
-	Balance int
-	Status  string
-	Chips   int // chips brought to the table
-}
-
-// ActionName represents a type of action a player can take
-type ActionName string
 
 // Event represents something that happened during a hand
 type Event struct {

@@ -27,6 +27,7 @@ const (
 
 // Hand represents a hand of poker being played
 type Hand struct {
+	Table          *Table
 	ID             string
 	Phase          HandPhase
 	TableID        string
@@ -600,44 +601,13 @@ func (h *Hand) Payout() error {
 	// Distribute the pot
 	for _, winnerID := range winners {
 		// Find player index
-		playerIndex := -1
-		for i, p := range h.Players {
-			if p.ID == winnerID {
-				playerIndex = i
-				break
-			}
-		}
-
-		if playerIndex != -1 {
-			// Add winnings to player chips
-			h.Players[playerIndex].Chips += winAmount
-
-			// Record event
-			h.Events = append(h.Events, Event{
-				Type:      "pot_awarded",
-				PlayerID:  winnerID,
-				Timestamp: time.Now(),
-				Data: map[string]interface{}{
-					"amount": winAmount,
-				},
-			})
-		}
+		h.Table.IncreasePlayerBuyIn(winnerID, winAmount)
 	}
 
 	// If there's a remainder due to uneven split, give it to first winner
 	// (usually the player closest to the left of the dealer)
 	if remainder > 0 && len(winners) > 0 {
-		playerIndex := -1
-		for i, p := range h.Players {
-			if p.ID == winners[0] {
-				playerIndex = i
-				break
-			}
-		}
-
-		if playerIndex != -1 {
-			h.Players[playerIndex].Chips += remainder
-		}
+		h.Table.IncreasePlayerBuyIn(winners[0], remainder)
 	}
 
 	// Empty the pot
@@ -651,21 +621,7 @@ func (h *Hand) Payout() error {
 
 // payoutToSingleWinner distributes the pot to a single winner
 func (h *Hand) payoutToSingleWinner(winnerID string) error {
-	// Find player index
-	playerIndex := -1
-	for i, p := range h.Players {
-		if p.ID == winnerID {
-			playerIndex = i
-			break
-		}
-	}
-
-	if playerIndex == -1 {
-		return errors.New("winner not found among players")
-	}
-
-	// Add pot to player's chips
-	h.Players[playerIndex].Chips += h.Pot
+	h.Table.IncreasePlayerBuyIn(winnerID, h.Pot)
 
 	// Record event
 	h.Events = append(h.Events, Event{
@@ -757,7 +713,7 @@ func (h *Hand) PrintState() string {
 
 	output += "Players:\n"
 	for _, player := range h.Players {
-		output += "  - ID: " + player.ID + ", Name: " + player.Name + ", Chips: " + fmt.Sprint(player.Chips) + "\n"
+		output += "  - ID: " + player.ID + ", Name: " + player.Name + ", Chips: " + fmt.Sprint(h.Table.GetlayerBuyIn(player.ID)) + "\n"
 	}
 	output += "\n"
 

@@ -17,6 +17,7 @@ type Table struct {
 	Hands      []Hand
 	ActiveHand *Hand
 	Status     TableStatus
+	BuyIns     map[string]int
 }
 
 type TableStatus string
@@ -80,13 +81,38 @@ func (t *Table) PlayerBuysIn(playerID string, chips int) error {
 	}
 
 	if t.Players[playerIndex].Balance < chips {
-		return errors.New("player does not have enough chips")
+		return errors.New("player does not have enough balance")
 	}
 
-	t.Players[playerIndex].Balance -= chips
-	t.Players[playerIndex].Chips += chips
+	t.Players[playerIndex].RemoveFromBalance(chips)
+	t.IncreasePlayerBuyIn(playerID, chips)
 
 	return nil
+}
+
+func (t *Table) GetlayerBuyIn(playerID string) int {
+	if _, exists := t.BuyIns[playerID]; !exists {
+		return 0
+	}
+	return t.BuyIns[playerID]
+}
+
+func (t *Table) IncreasePlayerBuyIn(playerID string, amount int) {
+	if _, exists := t.BuyIns[playerID]; !exists {
+		t.BuyIns[playerID] = 0
+	}
+	t.BuyIns[playerID] += amount
+}
+
+func (t *Table) DecreasePlayerBuyIn(playerID string, amount int) {
+	if _, exists := t.BuyIns[playerID]; !exists {
+		t.BuyIns[playerID] = 0
+	}
+	t.BuyIns[playerID] -= amount
+}
+
+func (t *Table) removePlayerFromBuyIns(playerID string) {
+	delete(t.BuyIns, playerID)
 }
 
 // PlayerLeaves removes a player from the table
@@ -104,6 +130,7 @@ func (t *Table) PlayerLeaves(playerID string) error {
 	}
 
 	t.Players = append(t.Players[:playerIndex], t.Players[playerIndex+1:]...)
+	t.removePlayerFromBuyIns(playerID)
 
 	return nil
 }
@@ -111,7 +138,7 @@ func (t *Table) PlayerLeaves(playerID string) error {
 // AllowPlaying starts the table if there are enough players
 func (t *Table) AllowPlaying() error {
 	if len(t.Players) < 2 {
-		return errors.New("need at least  players to start")
+		return errors.New("need at least 2 players to start")
 	}
 
 	if t.Status != TableStatusWaiting {
