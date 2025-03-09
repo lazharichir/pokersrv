@@ -66,7 +66,7 @@ func TestBasicTableFlow(t *testing.T) {
 	assert.NoError(t, addPlayer2Err)
 
 	// start the table
-	startErr := table1.StartPlaying()
+	startErr := table1.AllowPlaying()
 	assert.NoError(t, startErr)
 
 	// start a new hand
@@ -171,7 +171,7 @@ func TestPlayerManagement(t *testing.T) {
 	assert.Equal(t, 2, len(table.Players))
 
 	// Test StartPlaying
-	startErr := table.StartPlaying()
+	startErr := table.AllowPlaying()
 	assert.NoError(t, startErr)
 	assert.Equal(t, TableStatusPlaying, table.Status)
 
