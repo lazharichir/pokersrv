@@ -24,7 +24,7 @@ func (e *MockEvent) Timestamp() time.Time {
 
 func TestNewTable(t *testing.T) {
 	// Setup
-	game := &Game{}
+	game := &Lobby{}
 	tableName := "Test Table"
 	rules := TableRules{}
 
@@ -43,7 +43,7 @@ func TestNewTable(t *testing.T) {
 
 func TestGetTable(t *testing.T) {
 	// Setup
-	game := &Game{
+	game := &Lobby{
 		tables: make(map[string]*Table),
 	}
 	tableName := "Test Table"
@@ -65,7 +65,7 @@ func TestGetTable(t *testing.T) {
 
 func TestAddEventHandler(t *testing.T) {
 	// Setup
-	game := &Game{}
+	game := &Lobby{}
 	handlerCalled := false
 
 	// Create a test handler
@@ -98,7 +98,7 @@ func TestAddEventHandler(t *testing.T) {
 
 func TestHandleTableEvent(t *testing.T) {
 	// Setup
-	game := &Game{}
+	game := &Lobby{}
 	eventReceived := false
 
 	// Add a game event handler to verify event propagation
@@ -125,9 +125,9 @@ func TestHandleTableEvent(t *testing.T) {
 	assert.Equal(t, mockEvent, game.Events[0])
 }
 
-func TestGame_MultipleEventHandlers(t *testing.T) {
+func TestLobby_MultipleEventHandlers(t *testing.T) {
 	// Setup
-	game := &Game{}
+	game := &Lobby{}
 	handler1Called := false
 	handler2Called := false
 
