@@ -1,8 +1,7 @@
-package poker
+package domain
 
 import (
 	"errors"
-	"time"
 )
 
 // Message represents a game event message
@@ -14,14 +13,6 @@ type Message interface {
 type Game struct {
 	tables    map[string]*Table
 	listeners []func(Message)
-}
-
-// Event represents something that happened during a hand
-type Event struct {
-	Type      string
-	PlayerID  string
-	Timestamp time.Time
-	Data      interface{}
 }
 
 // AddTable adds a new table to the game

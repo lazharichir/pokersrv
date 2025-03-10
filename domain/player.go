@@ -1,4 +1,4 @@
-package poker
+package domain
 
 // Player represents a player in the game
 type Player struct {

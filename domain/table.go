@@ -1,4 +1,4 @@
-package poker
+package domain
 
 import (
 	"errors"
@@ -171,7 +171,6 @@ func (t *Table) StartNewHand() error {
 		// Initialize new tracking fields
 		AntesPaid:        make(map[string]int),
 		ContinuationBets: make(map[string]int),
-		DiscardCosts:     make(map[string]int),
 		ActivePlayers:    make(map[string]bool),
 		ButtonPosition:   t.findButtonPosition(), // Implement this method to track button
 	}

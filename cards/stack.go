@@ -1,7 +1,28 @@
 package cards
 
+import "strings"
+
 // Stack represents multiple cards
 type Stack []Card
+
+func (stack *Stack) DealCard() Card {
+	deck := *stack
+	card := deck[0]
+	*stack = deck[1:]
+	return card
+}
+
+func (stack *Stack) DealCards(n int) Stack {
+	deck := *stack
+	cards := deck[:n]
+	*stack = deck[n:]
+	return Stack(cards)
+}
+
+func (stack *Stack) BurnCard() {
+	deck := *stack
+	*stack = deck[1:]
+}
 
 func (stack *Stack) AddCard(card Card) {
 	*stack = append(*stack, card)
@@ -22,7 +43,15 @@ func (stack Stack) String() string {
 	for _, c := range stack {
 		s += c.String() + " "
 	}
-	return s
+	return strings.TrimSpace(s)
+}
+
+func (stack Stack) Count() int {
+	return len(stack)
+}
+
+func (stack Stack) IsEmpty() bool {
+	return len(stack) == 0
 }
 
 // NewStack creates a new stack with a given number of cards
