@@ -1,6 +1,9 @@
 package cards
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // CardFromString creates a card from a string representation
 // e.g., "10♠" or "10s" or "10S" -> Card{Suit: Spades, Value: Ten}
@@ -10,26 +13,29 @@ func CardFromString(s string) (Card, error) {
 		return Wildcard(), nil
 	}
 
-	if len(s) < 2 {
+	runes := []rune(s)
+	if len(runes) < 2 {
 		return Card{}, fmt.Errorf("invalid card shorthand: %s", s)
 	}
 
 	var suit Suit
-	switch s[len(s)-1:] {
-	case "♠", "s", "S":
+	suitRune := runes[len(runes)-1]
+	switch suitRune {
+	case '♠', 's', 'S':
 		suit = Spades
-	case "♥", "h", "H":
+	case '♥', 'h', 'H':
 		suit = Hearts
-	case "♦", "d", "D":
+	case '♦', 'd', 'D':
 		suit = Diamonds
-	case "♣", "c", "C":
+	case '♣', 'c', 'C':
 		suit = Clubs
 	default:
-		return Card{}, fmt.Errorf("invalid card suit: %s", s[len(s)-1:])
+		return Card{}, fmt.Errorf("invalid card suit: %s", string(suitRune))
 	}
 
+	valueRunes := runes[:len(runes)-1]
 	var value Value
-	switch s[:len(s)-1] {
+	switch strings.ToUpper(string(valueRunes)) {
 	case "A":
 		value = Ace
 	case "K":
@@ -57,7 +63,7 @@ func CardFromString(s string) (Card, error) {
 	case "2":
 		value = Two
 	default:
-		return Card{}, fmt.Errorf("invalid card value: %s", s[:len(s)-1])
+		return Card{}, fmt.Errorf("invalid card value: %s", string(valueRunes))
 	}
 
 	return Card{Suit: suit, Value: value}, nil

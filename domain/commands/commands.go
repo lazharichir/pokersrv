@@ -1,6 +1,6 @@
 package commands
 
-import "github.com/lazharichir/poker/cards"
+import "github.com/lazharichir/poker/domain/cards"
 
 type Command interface {
 	Name() string

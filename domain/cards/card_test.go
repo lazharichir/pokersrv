@@ -68,10 +68,11 @@ func TestCardFromString(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := CardFromString(tt.input)
 			if tt.wantErr {
-				require.Error(t, err, "CardFromString(%q) should return an error", tt.input)
+				require.Error(t, err)
+				require.Equal(t, Card{}, got, "Expected empty card when error occurs")
 			} else {
-				require.NoError(t, err, "CardFromString(%q) should not return an error", tt.input)
-				require.Equal(t, tt.want, got, "CardFromString(%q) should return the correct card", tt.input)
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
 			}
 		})
 	}

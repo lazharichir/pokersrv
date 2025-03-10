@@ -3,7 +3,7 @@ package hands
 import (
 	"testing"
 
-	"github.com/lazharichir/poker/cards"
+	"github.com/lazharichir/poker/domain/cards"
 	"github.com/stretchr/testify/assert"
 )
 

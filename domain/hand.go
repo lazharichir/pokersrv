@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lazharichir/poker/cards"
+	"github.com/lazharichir/poker/domain/cards"
 	"github.com/lazharichir/poker/domain/events"
 	"github.com/lazharichir/poker/domain/hands"
 )

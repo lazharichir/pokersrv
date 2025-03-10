@@ -3,7 +3,7 @@ package hands
 import (
 	"sort"
 
-	"github.com/lazharichir/poker/cards"
+	"github.com/lazharichir/poker/domain/cards"
 )
 
 // HandRank represents the strength of a poker hand

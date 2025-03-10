@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lazharichir/poker/cards"
+	"github.com/lazharichir/poker/domain/cards"
 	"github.com/lazharichir/poker/domain/events"
 	"github.com/lazharichir/poker/domain/hands"
 	"github.com/stretchr/testify/assert"
@@ -178,8 +178,10 @@ func TestPlayerPlacesContinuationBet(t *testing.T) {
 		err = hand.PlayerPlacesContinuationBet(hand.CurrentBettor, 100)
 		assert.NoError(t, err)
 
-		// Check phase transition occurred
-		assert.Equal(t, HandPhase_CommunityDeal, hand.Phase)
+		// Check phase transition occurred, would be to community deal
+		// but it then automatically proceeds to community deal
+		// and continues to next phase, which is community selection
+		assert.Equal(t, HandPhase_CommunitySelection, hand.Phase)
 
 		// Check BettingRoundEnded event was emitted
 		event, found := findEventOfType(hand.Events, events.BettingRoundEnded{}.Name())

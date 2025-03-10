@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lazharichir/poker/cards"
+	"github.com/lazharichir/poker/domain/cards"
 	"github.com/lazharichir/poker/domain/events"
 	"github.com/lazharichir/poker/domain/hands"
 	"github.com/sanity-io/litter"
