@@ -528,6 +528,13 @@ func (h *Hand) TransitionToCommunitySelectionPhase() {
 	// in this phase, players have 5 seconds to select three
 	// community cards to form the best hand
 	// once a card is selected, they cannot change it
+
+	h.emitEvent(events.CommunitySelectionStarted{
+		TableID:   h.TableID,
+		HandID:    h.ID,
+		TimeLimit: 5 * time.Second,
+		At:        time.Now(),
+	})
 }
 
 func (h *Hand) PlayerSelectsCommunityCard(playerID string, selectedCard cards.Card) error {
@@ -627,6 +634,12 @@ func (h *Hand) TransitionToDecisionPhase() {
 		PreviousPhase: string(previousPhase),
 		NewPhase:      string(h.Phase),
 		At:            time.Now(),
+	})
+
+	h.emitEvent(events.CommunitySelectionEnded{
+		TableID: h.TableID,
+		HandID:  h.ID,
+		At:      time.Now(),
 	})
 
 	// Evaluate hands and determine the winner(s)
