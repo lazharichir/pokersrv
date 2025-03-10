@@ -743,7 +743,7 @@ func (h *Hand) haveAllActivePlayersSelectedTheirCommunityCards() bool {
 }
 
 func (h *Hand) TransitionToDecisionPhase() {
-	if !h.IsInPhase(HandPhase_HandReveal) {
+	if !h.IsInPhase(HandPhase_CommunitySelection) {
 		return
 	}
 
@@ -781,38 +781,15 @@ func (h *Hand) TransitionToDecisionPhase() {
 // EvaluateHands evaluates all active players' hands and determines the winner(s)
 func (h *Hand) EvaluateHands() ([]hands.HandComparisonResult, error) {
 	// Create a map of player ID to their combined hole and community cards
-	playerCards := make(map[string]cards.Stack)
-	for playerID, holeCards := range h.HoleCards {
-		if !h.IsPlayerActive(playerID) {
-			continue
-		}
-
-		// Combine hole cards and community cards
-		combinedCards := append(cards.Stack{}, holeCards...)
-		combinedCards = append(combinedCards, h.CommunityCards...)
-		playerCards[playerID] = combinedCards
-	}
+	playerCards := h.combineAllPlayerHoleAndSelectedCommunityCards()
 
 	// Use the hand evaluator to determine the best hand for each player
 	// (This assumes we have access to the hands package)
-	results := h.comparePlayerHands(playerCards)
-
-	// Record event with the results
-	resultData := make([]map[string]interface{}, len(results))
-	for i, result := range results {
-		resultData[i] = map[string]interface{}{
-			"player_id":   result.PlayerID,
-			"hand_rank":   result.HandRank,
-			"is_winner":   result.IsWinner,
-			"place_index": result.PlaceIndex,
-		}
-	}
-
-	h.Results = results
+	h.Results = h.comparePlayerHands(playerCards)
 
 	// Emit HandsEvaluated event
 	handResults := make(map[string]hands.HandComparisonResult)
-	for _, r := range results {
+	for _, r := range h.Results {
 		handResults[r.PlayerID] = r
 	}
 
@@ -825,7 +802,7 @@ func (h *Hand) EvaluateHands() ([]hands.HandComparisonResult, error) {
 
 	h.emitShowdownEvents()
 
-	return results, nil
+	return h.Results, nil
 }
 
 func (h *Hand) comparePlayerHands(playerCards map[string]cards.Stack) []hands.HandComparisonResult {
@@ -874,7 +851,7 @@ func (h *Hand) Payout() error {
 	}
 
 	// If one winner found
-	if len(winners) == 0 {
+	if len(winners) == 1 {
 		return h.awardPayout(winners[0], h.Pot, "winner takes all")
 	}
 
@@ -1137,6 +1114,22 @@ func (h *Hand) PrintState() string {
 	output += "--------------------------------------------------\n"
 
 	return output
+}
+
+func (h *Hand) combineAllPlayerHoleAndSelectedCommunityCards() map[string]cards.Stack {
+	lookup := make(map[string]cards.Stack)
+	for _, player := range h.Players {
+		lookup[player.ID] = h.combinePlayerHoleAndSelectedCommunityCards(player.ID)
+	}
+	return lookup
+}
+
+func (h *Hand) combinePlayerHoleAndSelectedCommunityCards(playerID string) cards.Stack {
+	holeCards := h.HoleCards[playerID]
+	communityCards := h.CommunitySelections[playerID]
+	combinedCards := append(cards.Stack{}, holeCards...)
+	combinedCards = append(combinedCards, communityCards...)
+	return combinedCards
 }
 
 func (h *Hand) countActivePlayers() int {
