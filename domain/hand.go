@@ -72,28 +72,6 @@ func (h *Hand) emitEvent(event events.Event) {
 	}
 }
 
-var allowedTransitions = map[HandPhase][]HandPhase{
-	HandPhase_Start:        {HandPhase_Antes},
-	HandPhase_Antes:        {HandPhase_Hole},
-	HandPhase_Hole:         {HandPhase_Continuation},
-	HandPhase_Continuation: {HandPhase_CommunityDeal},
-	// etc.
-}
-
-func (h *Hand) canTransitionTo(nextPhase HandPhase) bool {
-	allowedNext, exists := allowedTransitions[h.Phase]
-	if !exists {
-		return false
-	}
-
-	for _, phase := range allowedNext {
-		if phase == nextPhase {
-			return true
-		}
-	}
-	return false
-}
-
 // InitializeHand initializes a new hand with a fresh deck and activates all players
 func (h *Hand) InitializeHand() {
 	// Initialize a new shuffled deck
@@ -121,6 +99,19 @@ func (h *Hand) InitializeHand() {
 
 	// Set the current bettor to the player left of the button
 	h.CurrentBettor = h.getPlayerLeftOfButton()
+
+	// Emit HandStarted event
+	playerIDs := make([]string, len(h.Players))
+	for i, player := range h.Players {
+		playerIDs[i] = player.ID
+	}
+
+	h.emitEvent(events.HandStarted{
+		TableID: h.TableID,
+		HandID:  h.ID,
+		Players: playerIDs,
+		At:      time.Now(),
+	})
 }
 
 func (h *Hand) TransitionToAntesPhase() {
@@ -128,7 +119,17 @@ func (h *Hand) TransitionToAntesPhase() {
 		return
 	}
 
+	previousPhase := h.Phase
 	h.Phase = HandPhase_Antes
+
+	// Emit phase changed event
+	h.emitEvent(events.PhaseChanged{
+		TableID:       h.TableID,
+		HandID:        h.ID,
+		PreviousPhase: string(previousPhase),
+		NewPhase:      string(h.Phase),
+		At:            time.Now(),
+	})
 
 	// The actual ante collection would happen in the game loop,
 	// giving each player the specified timeout to respond.
@@ -158,6 +159,15 @@ func (h *Hand) PlayerPlacesAnte(playerID string, amount int) error {
 	h.addToPlayerAntesPaid(playerID, amount)
 	h.increasePot(amount)
 
+	// Emit AntePlaced event
+	h.emitEvent(events.AntePlaced{
+		TableID:  h.TableID,
+		HandID:   h.ID,
+		PlayerID: playerID,
+		Amount:   amount,
+		At:       time.Now(),
+	})
+
 	// Find next player to act
 	h.CurrentBettor = h.getNextActiveBettor(playerID)
 
@@ -179,6 +189,16 @@ func (h *Hand) HandleAntePhaseTimeout() error {
 	for _, player := range h.Players {
 		if h.IsPlayerActive(player.ID) && !h.hasAlreadyPlacedAnte(player.ID) {
 			h.setPlayerAsInactive(player.ID)
+
+			// Emit PlayerTimedOut event
+			h.emitEvent(events.PlayerTimedOut{
+				TableID:       h.TableID,
+				HandID:        h.ID,
+				PlayerID:      player.ID,
+				Phase:         string(h.Phase),
+				DefaultAction: "fold", // Assuming default action is fold
+				At:            time.Now(),
+			})
 		}
 	}
 
@@ -198,7 +218,17 @@ func (h *Hand) TransitionToHolePhase() {
 		return
 	}
 
+	previousPhase := h.Phase
 	h.Phase = HandPhase_Hole
+
+	// Emit phase changed event
+	h.emitEvent(events.PhaseChanged{
+		TableID:       h.TableID,
+		HandID:        h.ID,
+		PreviousPhase: string(previousPhase),
+		NewPhase:      string(h.Phase),
+		At:            time.Now(),
+	})
 
 	// Reset CurrentBettor for next phase
 	h.CurrentBettor = h.getPlayerLeftOfButton()
@@ -209,6 +239,10 @@ func (h *Hand) DealHoleCards() error {
 	if !h.IsInPhase(HandPhase_Hole) {
 		return errors.New("not in hole card phase")
 	}
+
+	// Create a map to track the dealing order
+	dealOrder := make(map[string]int)
+	dealPosition := 0
 
 	dealRound := func() error {
 		for i := 0; i < len(h.Players); i++ {
@@ -224,6 +258,21 @@ func (h *Hand) DealHoleCards() error {
 				// Deal one card
 				card := h.Deck.DealCard()
 				h.HoleCards[player.ID] = append(h.HoleCards[player.ID], card)
+
+				// Record deal position for this player (first time only)
+				if _, exists := dealOrder[player.ID]; !exists {
+					dealOrder[player.ID] = dealPosition
+					dealPosition++
+				}
+
+				// Emit HoleCardDealt event
+				h.emitEvent(events.HoleCardDealt{
+					TableID:  h.TableID,
+					HandID:   h.ID,
+					PlayerID: player.ID,
+					Card:     card,
+					At:       time.Now(),
+				})
 			}
 		}
 		return nil
@@ -239,6 +288,14 @@ func (h *Hand) DealHoleCards() error {
 		return err
 	}
 
+	// Emit HoleCardsDealt event with the dealing order
+	h.emitEvent(events.HoleCardsDealt{
+		TableID:   h.TableID,
+		HandID:    h.ID,
+		DealOrder: dealOrder,
+		At:        time.Now(),
+	})
+
 	// Transition to continuation phase
 	h.TransitionToContinuationPhase()
 
@@ -250,7 +307,17 @@ func (h *Hand) TransitionToContinuationPhase() {
 		return
 	}
 
+	previousPhase := h.Phase
 	h.Phase = HandPhase_Continuation
+
+	// Emit phase changed event
+	h.emitEvent(events.PhaseChanged{
+		TableID:       h.TableID,
+		HandID:        h.ID,
+		PreviousPhase: string(previousPhase),
+		NewPhase:      string(h.Phase),
+		At:            time.Now(),
+	})
 
 	// Reset CurrentBettor for next phase
 	h.CurrentBettor = h.getPlayerLeftOfButton()
@@ -282,6 +349,15 @@ func (h *Hand) PlayerPlacesContinuationBet(playerID string, amount int) error {
 	h.Table.DecreasePlayerBuyIn(playerID, amount)
 	h.increasePot(amount)
 
+	// Emit ContinuationBetPlaced event
+	h.emitEvent(events.ContinuationBetPlaced{
+		TableID:  h.TableID,
+		HandID:   h.ID,
+		PlayerID: playerID,
+		Amount:   amount,
+		At:       time.Now(),
+	})
+
 	// Find next player to act
 	h.CurrentBettor = h.getNextActiveBettor(playerID)
 
@@ -312,6 +388,15 @@ func (h *Hand) PlayerFolds(playerID string) error {
 
 	// Mark player as inactive
 	h.setPlayerAsInactive(playerID)
+
+	// Emit PlayerFolded event
+	h.emitEvent(events.PlayerFolded{
+		TableID:  h.TableID,
+		HandID:   h.ID,
+		PlayerID: playerID,
+		Phase:    string(h.Phase),
+		At:       time.Now(),
+	})
 
 	// Check if only one player remains
 	if h.countActivePlayers() == 1 {
@@ -353,7 +438,17 @@ func (h *Hand) TransitionToCommunityDealPhase() {
 		return
 	}
 
+	previousPhase := h.Phase
 	h.Phase = HandPhase_CommunityDeal
+
+	// Emit phase changed event
+	h.emitEvent(events.PhaseChanged{
+		TableID:       h.TableID,
+		HandID:        h.ID,
+		PreviousPhase: string(previousPhase),
+		NewPhase:      string(h.Phase),
+		At:            time.Now(),
+	})
 
 	// Reset CurrentBettor for next phase
 	h.CurrentBettor = h.getPlayerLeftOfButton()
@@ -396,6 +491,15 @@ func (h *Hand) DealCommunityCard() error {
 	card := h.Deck.DealCard()
 	h.CommunityCards = append(h.CommunityCards, card)
 
+	// Emit CommunityCardDealt event
+	h.emitEvent(events.CommunityCardDealt{
+		TableID:   h.TableID,
+		HandID:    h.ID,
+		CardIndex: len(h.CommunityCards) - 1, // Index of the card just dealt (0-based)
+		Card:      card,
+		At:        time.Now(),
+	})
+
 	// Transition to decision phase if all community cards have been dealt
 	if len(h.CommunityCards) == 8 {
 		h.TransitionToCommunitySelectionPhase()
@@ -408,8 +512,18 @@ func (h *Hand) TransitionToCommunitySelectionPhase() {
 		return
 	}
 
+	previousPhase := h.Phase
 	h.Phase = HandPhase_CommunitySelection
 	h.CommunitySelectionStartedAt = time.Now()
+
+	// Emit phase changed event
+	h.emitEvent(events.PhaseChanged{
+		TableID:       h.TableID,
+		HandID:        h.ID,
+		PreviousPhase: string(previousPhase),
+		NewPhase:      string(h.Phase),
+		At:            time.Now(),
+	})
 
 	// in this phase, players have 5 seconds to select three
 	// community cards to form the best hand
@@ -456,6 +570,16 @@ func (h *Hand) PlayerSelectsCommunityCard(playerID string, selectedCard cards.Ca
 	// Add card to player's selections
 	h.CommunitySelections[playerID] = append(h.CommunitySelections[playerID], selectedCard)
 
+	// Emit CommunityCardSelected event
+	h.emitEvent(events.CommunityCardSelected{
+		TableID:        h.TableID,
+		HandID:         h.ID,
+		PlayerID:       playerID,
+		Card:           selectedCard.String(),                // Assuming Card has a String() method
+		SelectionOrder: len(h.CommunitySelections[playerID]), // Order in which card was selected
+		At:             time.Now(),
+	})
+
 	// Transition to the decision phase if all players have selected their cards
 	if h.haveAllActivePlayersSelectedTheirCommunityCards() {
 		h.TransitionToDecisionPhase()
@@ -493,7 +617,17 @@ func (h *Hand) TransitionToDecisionPhase() {
 		return
 	}
 
+	previousPhase := h.Phase
 	h.Phase = HandPhase_Decision
+
+	// Emit phase changed event
+	h.emitEvent(events.PhaseChanged{
+		TableID:       h.TableID,
+		HandID:        h.ID,
+		PreviousPhase: string(previousPhase),
+		NewPhase:      string(h.Phase),
+		At:            time.Now(),
+	})
 
 	// Evaluate hands and determine the winner(s)
 	h.EvaluateHands()
@@ -552,7 +686,17 @@ func (h *Hand) TransitionToPayoutPhase() {
 		return
 	}
 
+	previousPhase := h.Phase
 	h.Phase = HandPhase_Payout
+
+	// Emit phase changed event
+	h.emitEvent(events.PhaseChanged{
+		TableID:       h.TableID,
+		HandID:        h.ID,
+		PreviousPhase: string(previousPhase),
+		NewPhase:      string(h.Phase),
+		At:            time.Now(),
+	})
 
 	// Payout the pot to the winner(s)
 	h.Payout()
@@ -637,7 +781,38 @@ func (h *Hand) TransitionToEndedPhase() {
 		return
 	}
 
+	previousPhase := h.Phase
 	h.Phase = HandPhase_Ended
+
+	// Emit phase changed event
+	h.emitEvent(events.PhaseChanged{
+		TableID:       h.TableID,
+		HandID:        h.ID,
+		PreviousPhase: string(previousPhase),
+		NewPhase:      string(h.Phase),
+		At:            time.Now(),
+	})
+
+	// Find winners
+	var winners []string
+	for _, result := range h.Results {
+		if result.IsWinner {
+			winners = append(winners, result.PlayerID)
+		}
+	}
+
+	// Calculate hand duration
+	duration := time.Since(h.StartedAt).Milliseconds()
+
+	// Emit HandEnded event
+	h.emitEvent(events.HandEnded{
+		TableID:  h.TableID,
+		HandID:   h.ID,
+		Duration: duration,
+		FinalPot: h.Pot,
+		Winners:  winners,
+		At:       time.Now(),
+	})
 }
 
 func (h *Hand) IsPlayerActive(playerID string) bool {
@@ -702,6 +877,13 @@ func (h *Hand) BurnCard() error {
 
 	// Remove top card without using it
 	h.Deck.BurnCard()
+
+	// Emit CardBurned event
+	h.emitEvent(events.CardBurned{
+		TableID: h.TableID,
+		HandID:  h.ID,
+		At:      time.Now(),
+	})
 
 	return nil
 }
