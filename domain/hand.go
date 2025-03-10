@@ -674,6 +674,21 @@ func (h *Hand) EvaluateHands() ([]hands.HandComparisonResult, error) {
 
 	h.Results = results
 
+	// Emit HandsEvaluated event
+	handResults := make(map[string]hands.HandComparisonResult)
+	for _, r := range results {
+		handResults[r.PlayerID] = r
+	}
+
+	h.emitEvent(events.HandsEvaluated{
+		TableID: h.TableID,
+		HandID:  h.ID,
+		Results: handResults,
+		At:      time.Now(),
+	})
+
+	h.emitShowdownEvents()
+
 	return results, nil
 }
 
@@ -1131,4 +1146,35 @@ func (h *Hand) getNextActiveBettor(currentBettorID string) string {
 	}
 
 	return ""
+}
+
+func (h *Hand) emitShowdownEvents() {
+	// Emit ShowdownStarted event
+	var activePlayers []string
+	for playerID, active := range h.ActivePlayers {
+		if active {
+			activePlayers = append(activePlayers, playerID)
+		}
+	}
+
+	h.emitEvent(events.ShowdownStarted{
+		TableID:       h.TableID,
+		HandID:        h.ID,
+		ActivePlayers: activePlayers,
+		At:            time.Now(),
+	})
+
+	// Emit PlayerShowedHand event for each active player
+	for playerID, holeCards := range h.HoleCards {
+		if h.IsPlayerActive(playerID) {
+			h.emitEvent(events.PlayerShowedHand{
+				TableID:                h.TableID,
+				HandID:                 h.ID,
+				PlayerID:               playerID,
+				HoleCards:              holeCards,
+				SelectedCommunityCards: h.CommunitySelections[playerID],
+				At:                     time.Now(),
+			})
+		}
+	}
 }
