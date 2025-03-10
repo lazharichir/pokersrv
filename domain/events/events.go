@@ -15,23 +15,36 @@ type Event interface {
 }
 
 // Existing events
-type UserSat struct {
+type PlayerJoinedTable struct {
 	TableID string
 	UserID  string
 	At      time.Time
 }
 
-func (u UserSat) Name() string         { return "USER_SAT" }
-func (u UserSat) Timestamp() time.Time { return u.At }
+func (u PlayerJoinedTable) Name() string         { return "PLAYER_JOINED_TABLE" }
+func (u PlayerJoinedTable) Timestamp() time.Time { return u.At }
 
-type UserStood struct {
+type PlayerLeftTable struct {
 	UserID  string
 	TableID string
 	At      time.Time
 }
 
-func (u UserStood) Name() string         { return "USER_STOOD" }
-func (u UserStood) Timestamp() time.Time { return u.At }
+func (u PlayerLeftTable) Name() string         { return "PLAYER_LEFT_TABLE" }
+func (u PlayerLeftTable) Timestamp() time.Time { return u.At }
+
+type PlayerChipsChanged struct {
+	UserID  string
+	TableID string
+	At      time.Time
+	//
+	Before int
+	After  int
+	Change int
+}
+
+func (p PlayerChipsChanged) Name() string         { return "PLAYER_CHIPS_CHANGED" }
+func (p PlayerChipsChanged) Timestamp() time.Time { return p.At }
 
 // Hand Phase Events
 type HandStarted struct {

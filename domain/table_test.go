@@ -20,25 +20,25 @@ func TestPlayerSeats(t *testing.T) {
 	}
 
 	// Test successful addition
-	err := table.PlayerSeats(player)
+	err := table.SeatPlayer(player)
 	assert.NoError(t, err)
 	assert.Len(t, table.Players, 1)
 	assert.Equal(t, player.ID, table.Players[0].ID)
 
 	// Test error when player already exists
-	err = table.PlayerSeats(player)
+	err = table.SeatPlayer(player)
 	assert.Error(t, err)
 	assert.Equal(t, "player already at table", err.Error())
 
-	// Test error when table not waiting
-	table.Status = TableStatusPlaying
+	// Test error when table has ended
+	table.Status = TableStatusEnded
 	newPlayer := Player{
 		ID:   uuid.NewString(),
 		Name: "Another Player",
 	}
-	err = table.PlayerSeats(newPlayer)
+	err = table.SeatPlayer(newPlayer)
 	assert.Error(t, err)
-	assert.Equal(t, "can only add players when table is waiting", err.Error())
+	assert.Equal(t, "can only add players when table is waiting or playing", err.Error())
 }
 
 func TestPlayerBuysIn(t *testing.T) {
@@ -161,7 +161,7 @@ func TestStartNewHand(t *testing.T) {
 	}
 
 	// Test error when table not in playing status
-	err := table.StartNewHand()
+	_, err := table.StartNewHand()
 	assert.Error(t, err)
 	assert.Equal(t, "table must be in playing status to start a new hand", err.Error())
 
@@ -169,7 +169,7 @@ func TestStartNewHand(t *testing.T) {
 	table.Status = TableStatusPlaying
 
 	// Test successful start hand
-	err = table.StartNewHand()
+	_, err = table.StartNewHand()
 	assert.NoError(t, err)
 	assert.NotNil(t, table.ActiveHand)
 	assert.Len(t, table.Hands, 1)
