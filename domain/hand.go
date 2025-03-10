@@ -121,16 +121,6 @@ func (h *Hand) InitializeHand() {
 
 	// Set the current bettor to the player left of the button
 	h.CurrentBettor = h.getPlayerLeftOfButton()
-
-	// Record event for hand initialization
-	h.Events = append(h.Events, Event{
-		Type:      "hand_initialized",
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"player_count": len(h.Players),
-			"button_pos":   h.ButtonPosition,
-		},
-	})
 }
 
 func (h *Hand) TransitionToAntesPhase() {
@@ -139,16 +129,6 @@ func (h *Hand) TransitionToAntesPhase() {
 	}
 
 	h.Phase = HandPhase_Antes
-
-	// Record event for phase transition
-	h.Events = append(h.Events, Event{
-		Type:      "phase_transition",
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"phase":      string(HandPhase_Antes),
-			"ante_value": h.TableRules.AnteValue,
-		},
-	})
 
 	// The actual ante collection would happen in the game loop,
 	// giving each player the specified timeout to respond.
@@ -178,16 +158,6 @@ func (h *Hand) PlayerPlacesAnte(playerID string, amount int) error {
 	h.addToPlayerAntesPaid(playerID, amount)
 	h.increasePot(amount)
 
-	// Add event
-	h.Events = append(h.Events, Event{
-		Type:      "ante_placed",
-		PlayerID:  playerID,
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"amount": amount,
-		},
-	})
-
 	// Find next player to act
 	h.CurrentBettor = h.getNextActiveBettor(playerID)
 
@@ -209,16 +179,6 @@ func (h *Hand) HandleAntePhaseTimeout() error {
 	for _, player := range h.Players {
 		if h.IsPlayerActive(player.ID) && !h.hasAlreadyPlacedAnte(player.ID) {
 			h.setPlayerAsInactive(player.ID)
-
-			// Record fold event
-			h.Events = append(h.Events, Event{
-				Type:      "player_auto_folded",
-				PlayerID:  player.ID,
-				Timestamp: time.Now(),
-				Data: map[string]interface{}{
-					"reason": "ante_timeout",
-				},
-			})
 		}
 	}
 
@@ -242,15 +202,6 @@ func (h *Hand) TransitionToHolePhase() {
 
 	// Reset CurrentBettor for next phase
 	h.CurrentBettor = h.getPlayerLeftOfButton()
-
-	// Record event for phase transition
-	h.Events = append(h.Events, Event{
-		Type:      "phase_transition",
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"phase": string(HandPhase_Hole),
-		},
-	})
 }
 
 // DealHoleCards deals two cards to each active player, one card at a time
@@ -288,12 +239,6 @@ func (h *Hand) DealHoleCards() error {
 		return err
 	}
 
-	// Record event for hole cards dealt
-	h.Events = append(h.Events, Event{
-		Type:      "hole_cards_dealt",
-		Timestamp: time.Now(),
-	})
-
 	// Transition to continuation phase
 	h.TransitionToContinuationPhase()
 
@@ -309,15 +254,6 @@ func (h *Hand) TransitionToContinuationPhase() {
 
 	// Reset CurrentBettor for next phase
 	h.CurrentBettor = h.getPlayerLeftOfButton()
-
-	// Record event for phase transition
-	h.Events = append(h.Events, Event{
-		Type:      "phase_transition",
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"phase": string(HandPhase_Continuation),
-		},
-	})
 
 	// The actual continuation betting would happen in the game loop,
 	// giving each player the specified timeout to respond.
@@ -345,16 +281,6 @@ func (h *Hand) PlayerPlacesContinuationBet(playerID string, amount int) error {
 	// Record the bet
 	h.Table.DecreasePlayerBuyIn(playerID, amount)
 	h.increasePot(amount)
-
-	// Add event
-	h.Events = append(h.Events, Event{
-		Type:      "continuation_bet_placed",
-		PlayerID:  playerID,
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"amount": amount,
-		},
-	})
 
 	// Find next player to act
 	h.CurrentBettor = h.getNextActiveBettor(playerID)
@@ -386,13 +312,6 @@ func (h *Hand) PlayerFolds(playerID string) error {
 
 	// Mark player as inactive
 	h.setPlayerAsInactive(playerID)
-
-	// Add event
-	h.Events = append(h.Events, Event{
-		Type:      "player_folded",
-		PlayerID:  playerID,
-		Timestamp: time.Now(),
-	})
 
 	// Check if only one player remains
 	if h.countActivePlayers() == 1 {
@@ -439,15 +358,6 @@ func (h *Hand) TransitionToCommunityDealPhase() {
 	// Reset CurrentBettor for next phase
 	h.CurrentBettor = h.getPlayerLeftOfButton()
 
-	// Record event for phase transition
-	h.Events = append(h.Events, Event{
-		Type:      "phase_transition",
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"phase": string(HandPhase_CommunityDeal),
-		},
-	})
-
 	// The actual community card dealing would happen in the game loop,
 	// giving each player the specified timeout to respond.
 	// Starting from the player left of the dealer (would need dealer position tracking)
@@ -486,20 +396,10 @@ func (h *Hand) DealCommunityCard() error {
 	card := h.Deck.DealCard()
 	h.CommunityCards = append(h.CommunityCards, card)
 
-	// Record event
-	h.Events = append(h.Events, Event{
-		Type:      "community_card_dealt",
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"card_index": len(h.CommunityCards) - 1,
-			"card":       card.String(),
-			"card_suit":  card.Suit,
-			"card_rank":  card.Value,
-		},
-	})
-
 	// Transition to decision phase if all community cards have been dealt
-
+	if len(h.CommunityCards) == 8 {
+		h.TransitionToCommunitySelectionPhase()
+	}
 	return nil
 }
 
@@ -595,15 +495,6 @@ func (h *Hand) TransitionToDecisionPhase() {
 
 	h.Phase = HandPhase_Decision
 
-	// Record event for phase transition
-	h.Events = append(h.Events, Event{
-		Type:      "phase_transition",
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"phase": string(HandPhase_Decision),
-		},
-	})
-
 	// Evaluate hands and determine the winner(s)
 	h.EvaluateHands()
 
@@ -647,14 +538,6 @@ func (h *Hand) EvaluateHands() ([]hands.HandComparisonResult, error) {
 		}
 	}
 
-	h.Events = append(h.Events, Event{
-		Type:      "hands_evaluated",
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"results": resultData,
-		},
-	})
-
 	h.Results = results
 
 	return results, nil
@@ -670,15 +553,6 @@ func (h *Hand) TransitionToPayoutPhase() {
 	}
 
 	h.Phase = HandPhase_Payout
-
-	// Record event for phase transition
-	h.Events = append(h.Events, Event{
-		Type:      "phase_transition",
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"phase": string(HandPhase_Payout),
-		},
-	})
 
 	// Payout the pot to the winner(s)
 	h.Payout()
@@ -740,18 +614,6 @@ func (h *Hand) Payout() error {
 
 func (h *Hand) awardPayout(winnerID string, amount int, reason string) error {
 	h.Table.IncreasePlayerBuyIn(winnerID, amount)
-
-	// Record event
-	h.Events = append(h.Events, Event{
-		Type:      "pot_awarded",
-		PlayerID:  winnerID,
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"amount": amount,
-			"reason": reason,
-		},
-	})
-
 	return nil
 }
 
@@ -794,16 +656,6 @@ func (h *Hand) setPlayerAsInactive(playerID string) {
 func (h *Hand) handleSinglePlayerWin(playerID string) {
 	// Skip to the payout phase directly
 	h.Phase = HandPhase_Payout
-
-	// Add event for single winner
-	h.Events = append(h.Events, Event{
-		Type:      "single_winner",
-		PlayerID:  playerID,
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"pot_amount": h.Pot,
-		},
-	})
 
 	// Handle payout logic
 	h.Payout()
@@ -850,12 +702,6 @@ func (h *Hand) BurnCard() error {
 
 	// Remove top card without using it
 	h.Deck.BurnCard()
-
-	// Record event
-	h.Events = append(h.Events, Event{
-		Type:      "card_burned",
-		Timestamp: time.Now(),
-	})
 
 	return nil
 }
@@ -919,7 +765,7 @@ func (h *Hand) PrintState() string {
 
 	output += "Events:\n"
 	for _, event := range h.Events {
-		output += "  - Type: " + event.Type + ", PlayerID: " + event.PlayerID + ", Timestamp: " + event.Timestamp.String() + "\n"
+		output += "  - Type: " + event.Name() + "\n"
 	}
 	output += "\n"
 
