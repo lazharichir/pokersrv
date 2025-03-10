@@ -931,10 +931,7 @@ func (h *Hand) payoutToLastPlayerStanding(winnerID string) error {
 }
 
 func (h *Hand) TransitionToEndedPhase() {
-	if !h.IsInPhase(HandPhase_Payout) {
-		return
-	}
-
+	// Remove the phase check to allow transitioning from any phase
 	previousPhase := h.Phase
 	h.Phase = HandPhase_Ended
 
