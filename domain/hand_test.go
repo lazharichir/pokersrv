@@ -9,31 +9,31 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func NewMockTable() *Table {
-	return &Table{
-		ID:   "tbl_test",
-		Name: "Test Table",
-		Rules: TableRules{
-			AnteValue:                 10,
-			ContinuationBetMultiplier: 3,
-			PlayerTimeout:             3 * time.Second,
-		},
-		BuyIns:  make(map[string]int),
-		Players: []Player{},
+func getDefaultTableRules() TableRules {
+	return TableRules{
+		AnteValue:                 10,
+		ContinuationBetMultiplier: 3,
+		PlayerTimeout:             3 * time.Second,
 	}
+}
+
+func NewTestTable() *Table {
+	table := NewTable("Poker Table For Testing", getDefaultTableRules())
+	table.ID = "tbl_test"
+	return table
 }
 
 // setupTestHand creates a hand with specified number of players in the continuation phase
 func setupContinuationPhaseHand(numPlayers int) (*Hand, *Table) {
-	table := NewMockTable()
+	table := NewTestTable()
 
 	// Create players
 	players := make([]Player, numPlayers)
 	for i := 0; i < numPlayers; i++ {
-		playerID := "player-" + fmt.Sprint('1'+i)
+		playerID := "player-" + fmt.Sprint(1+i)
 		players[i] = Player{
 			ID:   playerID,
-			Name: "Player " + fmt.Sprint('1'+i),
+			Name: "Player " + fmt.Sprint(1+i),
 		}
 		table.BuyIns[playerID] = 1000 // Start with 1000 chips
 	}
@@ -103,7 +103,7 @@ func TestPlayerPlacesContinuationBet(t *testing.T) {
 
 		// Check ContinuationBetPlaced event was emitted
 		assert.Greater(t, len(hand.Events), initialEventsCount)
-		event, found := findEventOfType(hand.Events, "ContinuationBetPlaced")
+		event, found := findEventOfType(hand.Events, events.ContinuationBetPlaced{}.Name())
 		assert.True(t, found)
 		betEvent, ok := event.(events.ContinuationBetPlaced)
 		assert.True(t, ok)
@@ -161,36 +161,34 @@ func TestPlayerPlacesContinuationBet(t *testing.T) {
 		// Setup
 		hand, _ := setupContinuationPhaseHand(2) // Just 2 players for simplicity
 
-		// First player already bet
-		firstPlayerID := hand.Players[1].ID
-		hand.ContinuationBets[firstPlayerID] = 50
-
 		// Current bettor is the last player to act
 		currentBettorID := hand.CurrentBettor
 		assert.Equal(t, "player-2", currentBettorID)
 
-		// Act - this should complete the betting round
-		err := hand.PlayerPlacesContinuationBet(currentBettorID, 100)
+		err := hand.PlayerPlacesContinuationBet(hand.CurrentBettor, 100)
+		assert.NoError(t, err)
 
-		// Assert
+		err = hand.PlayerPlacesContinuationBet(hand.CurrentBettor, 100)
 		assert.NoError(t, err)
 
 		// Check phase transition occurred
 		assert.Equal(t, HandPhase_CommunityDeal, hand.Phase)
 
 		// Check BettingRoundEnded event was emitted
-		event, found := findEventOfType(hand.Events, "BettingRoundEnded")
+		event, found := findEventOfType(hand.Events, events.BettingRoundEnded{}.Name())
 		assert.True(t, found)
 		endEvent, ok := event.(events.BettingRoundEnded)
 		assert.True(t, ok)
 		assert.Equal(t, string(HandPhase_Continuation), endEvent.Phase)
 
 		// Check PhaseChanged event was emitted
-		event, found = findEventOfType(hand.Events, "PhaseChanged")
+		event, found = findEventOfType(hand.Events, events.PhaseChanged{}.Name())
 		assert.True(t, found)
 		phaseEvent, ok := event.(events.PhaseChanged)
 		assert.True(t, ok)
 		assert.Equal(t, string(HandPhase_Continuation), phaseEvent.PreviousPhase)
 		assert.Equal(t, string(HandPhase_CommunityDeal), phaseEvent.NewPhase)
+
+		fmt.Print(hand.PrintState())
 	})
 }
