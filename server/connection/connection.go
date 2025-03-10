@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -66,11 +67,16 @@ func (m *Manager) SendToPlayer(playerID string, message []byte) bool {
 	defer m.mutex.RUnlock()
 
 	if connID, exists := m.playerMap[playerID]; exists {
+		fmt.Println("found", playerID)
 		if client, ok := m.clients[connID]; ok {
+			fmt.Println("sending message to player", playerID)
 			client.Send <- message
+			fmt.Println("message sent to player", playerID)
 			return true
 		}
 	}
+
+	fmt.Println("not found")
 	return false
 }
 
@@ -137,4 +143,13 @@ func (m *Manager) IsClientAtTable(clientID string, tableID string) bool {
 		}
 	}
 	return false
+}
+
+// AddPlayerToClient associates a player ID with a client ID in the playerMap
+func (m *Manager) AddPlayerToClient(clientID string, playerID string) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	m.playerMap[playerID] = clientID
+	fmt.Println("Added player mapping:", playerID, "->", clientID)
 }

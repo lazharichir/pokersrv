@@ -59,6 +59,7 @@ type TableRules struct {
 	DiscardCostType           string
 	DiscardCostValue          int
 	PlayerTimeout             time.Duration
+	MaxPlayers                int
 }
 
 // SeatPlayer adds a player to the table
@@ -310,4 +311,17 @@ func (t *Table) emitEvent(event events.Event) {
 	for _, handler := range t.eventHandlers {
 		handler(event)
 	}
+}
+
+// GetPlayers returns all players at the table
+func (t *Table) GetPlayers() []*Player {
+	return t.Players
+}
+
+// GetCurrentHandID returns the ID of the current active hand, if any
+func (t *Table) GetCurrentHandID() string {
+	if t.ActiveHand != nil {
+		return t.ActiveHand.ID
+	}
+	return ""
 }

@@ -133,3 +133,34 @@ func (l *Lobby) emitEvent(event events.Event) {
 		handler(event)
 	}
 }
+
+// GetTables returns all tables in the lobby
+func (l *Lobby) GetTables() []*Table {
+	tables := make([]*Table, 0, len(l.tables))
+	for _, table := range l.tables {
+		tables = append(tables, table)
+	}
+	return tables
+}
+
+// CreateTable creates a new table in the lobby
+func (l *Lobby) CreateTable(name string, maxPlayers int, minBuyIn int) (*Table, error) {
+	if l.tables == nil {
+		l.tables = make(map[string]*Table)
+	}
+
+	// Create table rules
+	rules := TableRules{
+		AnteValue:                 minBuyIn / 10,   // 10% of min buy-in
+		ContinuationBetMultiplier: 2,               // Double ante for continuation bet
+		PlayerTimeout:             time.Second * 5, // 5s timeout
+		MaxPlayers:                maxPlayers,
+	}
+
+	// Create the table
+	table := NewTable(name, rules)
+
+	l.tables[table.ID] = table
+
+	return table, nil
+}

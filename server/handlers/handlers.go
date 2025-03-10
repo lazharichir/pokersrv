@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/lazharichir/poker/domain"
 	"github.com/lazharichir/poker/domain/commands"
@@ -27,14 +28,14 @@ func NewCommandRouter(lobby *domain.Lobby, connMgr *connection.Manager) *Command
 func (r *CommandRouter) HandleCommand(client *connection.Client, message []byte) error {
 	// First determine command type
 	var baseCmd struct {
-		Type string `json:"type"`
+		Name string `json:"name"`
 	}
 	if err := json.Unmarshal(message, &baseCmd); err != nil {
 		return err
 	}
 
 	// Route to appropriate handler based on command type
-	switch baseCmd.Type {
+	switch baseCmd.Name {
 	case commands.EnterLobby{}.Name():
 		var cmd commands.EnterLobby
 		if err := json.Unmarshal(message, &cmd); err != nil {
@@ -99,11 +100,26 @@ func (r *CommandRouter) HandleCommand(client *connection.Client, message []byte)
 		return r.handlePlayerSelectsCommunityCard(client, cmd)
 
 	default:
+		fmt.Println("unknown command type", baseCmd.Name)
 		return errors.New("unknown command type")
 	}
 }
 
 func (r *CommandRouter) handleEnterLobby(client *connection.Client, cmd commands.EnterLobby) error {
+	// Initialize Player if not already set
+	if client.Player == nil {
+		// Create a new player - in future we'd fetch this from a database
+		client.Player = &domain.Player{
+			ID:      cmd.PlayerID,
+			Name:    cmd.PlayerName,
+			Status:  "active",
+			Balance: 1_000, // Default starting balance
+		}
+
+		// Register the player ID with the client ID in the connection manager
+		r.connMgr.AddPlayerToClient(client.ID, cmd.PlayerID)
+	}
+
 	if err := r.lobby.EntersLobby(client.Player); err != nil {
 		return err
 	}
