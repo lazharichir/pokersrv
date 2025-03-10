@@ -11,8 +11,7 @@ type Message interface {
 
 // Game represents the poker game server
 type Game struct {
-	tables    map[string]*Table
-	listeners []func(Message)
+	tables map[string]*Table
 }
 
 // AddTable adds a new table to the game
@@ -34,7 +33,7 @@ func (g *Game) AddTable(table Table) error {
 // GetTable retrieves a table by ID
 func (g *Game) GetTable(tableID string) (*Table, error) {
 	if g.tables == nil {
-		return nil, errors.New("no tables exist")
+		g.tables = make(map[string]*Table)
 	}
 
 	table, exists := g.tables[tableID]
@@ -43,16 +42,4 @@ func (g *Game) GetTable(tableID string) (*Table, error) {
 	}
 
 	return table, nil
-}
-
-// listen registers a message listener
-func (g *Game) listen(listener func(Message)) {
-	g.listeners = append(g.listeners, listener)
-}
-
-// publish sends a message to all listeners
-func (g *Game) publish(msg Message) {
-	for _, listener := range g.listeners {
-		listener(msg)
-	}
 }

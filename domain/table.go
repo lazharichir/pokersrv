@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lazharichir/poker/cards"
+	"github.com/lazharichir/poker/domain/events"
 )
 
 // Table represents a poker table
@@ -159,12 +160,14 @@ func (t *Table) StartNewHand() error {
 	// Create the first hand
 	hand := Hand{
 		ID:             uuid.NewString(),
+		Table:          t,
 		TableID:        t.ID,
 		Players:        t.Players,
 		CommunityCards: []cards.Card{},
 		HoleCards:      make(map[string]cards.Stack),
 		Pot:            0,
-		Events:         []Event{},
+		Events:         []events.Event{},
+		eventHandlers:  []events.EventHandler{},
 		TableRules:     t.Rules,
 		StartedAt:      time.Now(),
 		Phase:          HandPhase_Start,

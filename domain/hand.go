@@ -131,6 +131,25 @@ func (h *Hand) TransitionToAntesPhase() {
 		At:            time.Now(),
 	})
 
+	// Emit BettingRoundStarted event
+	h.emitEvent(events.BettingRoundStarted{
+		TableID:    h.TableID,
+		HandID:     h.ID,
+		Phase:      string(h.Phase),
+		FirstToAct: h.getPlayerLeftOfButton(),
+		At:         time.Now(),
+	})
+
+	// Emit PlayerTurnStarted for the first player
+	h.emitEvent(events.PlayerTurnStarted{
+		TableID:   h.TableID,
+		HandID:    h.ID,
+		PlayerID:  h.CurrentBettor,
+		Phase:     string(h.Phase),
+		TimeoutAt: time.Now().Add(h.TableRules.PlayerTimeout),
+		At:        time.Now(),
+	})
+
 	// The actual ante collection would happen in the game loop,
 	// giving each player the specified timeout to respond.
 	// Starting from the player left of the dealer (would need dealer position tracking)
@@ -171,8 +190,28 @@ func (h *Hand) PlayerPlacesAnte(playerID string, amount int) error {
 	// Find next player to act
 	h.CurrentBettor = h.getNextActiveBettor(playerID)
 
+	// Emit PlayerTurnStarted for the next player if there is one
+	if h.CurrentBettor != "" && !h.areAllAntesPaid() {
+		h.emitEvent(events.PlayerTurnStarted{
+			TableID:   h.TableID,
+			HandID:    h.ID,
+			PlayerID:  h.CurrentBettor,
+			Phase:     string(h.Phase),
+			TimeoutAt: time.Now().Add(h.TableRules.PlayerTimeout),
+			At:        time.Now(),
+		})
+	}
+
 	// Check if all antes have been paid
 	if h.areAllAntesPaid() {
+		// Emit BettingRoundEnded event
+		h.emitEvent(events.BettingRoundEnded{
+			TableID:   h.TableID,
+			HandID:    h.ID,
+			Phase:     string(h.Phase),
+			TotalBets: h.Pot,
+			At:        time.Now(),
+		})
 		h.TransitionToHolePhase()
 	}
 
@@ -201,6 +240,15 @@ func (h *Hand) HandleAntePhaseTimeout() error {
 			})
 		}
 	}
+
+	// Emit BettingRoundEnded event
+	h.emitEvent(events.BettingRoundEnded{
+		TableID:   h.TableID,
+		HandID:    h.ID,
+		Phase:     string(h.Phase),
+		TotalBets: h.Pot,
+		At:        time.Now(),
+	})
 
 	// If we have at least one active player, proceed
 	if h.countActivePlayers() > 0 {
@@ -322,6 +370,25 @@ func (h *Hand) TransitionToContinuationPhase() {
 	// Reset CurrentBettor for next phase
 	h.CurrentBettor = h.getPlayerLeftOfButton()
 
+	// Emit BettingRoundStarted event
+	h.emitEvent(events.BettingRoundStarted{
+		TableID:    h.TableID,
+		HandID:     h.ID,
+		Phase:      string(h.Phase),
+		FirstToAct: h.CurrentBettor,
+		At:         time.Now(),
+	})
+
+	// Emit PlayerTurnStarted for the first player
+	h.emitEvent(events.PlayerTurnStarted{
+		TableID:   h.TableID,
+		HandID:    h.ID,
+		PlayerID:  h.CurrentBettor,
+		Phase:     string(h.Phase),
+		TimeoutAt: time.Now().Add(h.TableRules.PlayerTimeout),
+		At:        time.Now(),
+	})
+
 	// The actual continuation betting would happen in the game loop,
 	// giving each player the specified timeout to respond.
 	// Starting from the player left of the dealer (would need dealer position tracking)
@@ -348,6 +415,7 @@ func (h *Hand) PlayerPlacesContinuationBet(playerID string, amount int) error {
 	// Record the bet
 	h.Table.DecreasePlayerBuyIn(playerID, amount)
 	h.increasePot(amount)
+	h.ContinuationBets[playerID] = amount
 
 	// Emit ContinuationBetPlaced event
 	h.emitEvent(events.ContinuationBetPlaced{
@@ -361,8 +429,29 @@ func (h *Hand) PlayerPlacesContinuationBet(playerID string, amount int) error {
 	// Find next player to act
 	h.CurrentBettor = h.getNextActiveBettor(playerID)
 
+	// Emit PlayerTurnStarted for the next player if there is one
+	if h.CurrentBettor != "" && !h.haveAllPlayersDecided() {
+		h.emitEvent(events.PlayerTurnStarted{
+			TableID:   h.TableID,
+			HandID:    h.ID,
+			PlayerID:  h.CurrentBettor,
+			Phase:     string(h.Phase),
+			TimeoutAt: time.Now().Add(h.TableRules.PlayerTimeout),
+			At:        time.Now(),
+		})
+	}
+
 	// Check if all continuation bets are in
 	if h.haveAllPlayersDecided() {
+		// Emit BettingRoundEnded event
+		h.emitEvent(events.BettingRoundEnded{
+			TableID:   h.TableID,
+			HandID:    h.ID,
+			Phase:     string(h.Phase),
+			TotalBets: h.calculateTotalContinuationBets(),
+			At:        time.Now(),
+		})
+
 		h.TransitionToCommunityDealPhase()
 	}
 
@@ -405,14 +494,46 @@ func (h *Hand) PlayerFolds(playerID string) error {
 		if err != nil {
 			return err
 		}
+
+		// Emit BettingRoundEnded event
+		h.emitEvent(events.BettingRoundEnded{
+			TableID:   h.TableID,
+			HandID:    h.ID,
+			Phase:     string(h.Phase),
+			TotalBets: h.calculateTotalContinuationBets(),
+			At:        time.Now(),
+		})
+
 		h.handleSinglePlayerWin(lastActivePlayer.ID)
+		return nil
 	}
 
 	// Find next player to act
 	h.CurrentBettor = h.getNextActiveBettor(playerID)
 
+	// Emit PlayerTurnStarted for the next player if there is one
+	if h.CurrentBettor != "" && !h.haveAllPlayersDecided() {
+		h.emitEvent(events.PlayerTurnStarted{
+			TableID:   h.TableID,
+			HandID:    h.ID,
+			PlayerID:  h.CurrentBettor,
+			Phase:     string(h.Phase),
+			TimeoutAt: time.Now().Add(h.TableRules.PlayerTimeout),
+			At:        time.Now(),
+		})
+	}
+
 	// Check if all continuation bets are in
 	if h.haveAllPlayersDecided() {
+		// Emit BettingRoundEnded event
+		h.emitEvent(events.BettingRoundEnded{
+			TableID:   h.TableID,
+			HandID:    h.ID,
+			Phase:     string(h.Phase),
+			TotalBets: h.calculateTotalContinuationBets(),
+			At:        time.Now(),
+		})
+
 		h.TransitionToCommunityDealPhase()
 	}
 
@@ -1190,4 +1311,13 @@ func (h *Hand) emitShowdownEvents() {
 			})
 		}
 	}
+}
+
+// Add a helper function to calculate total continuation bets
+func (h *Hand) calculateTotalContinuationBets() int {
+	total := 0
+	for _, amount := range h.ContinuationBets {
+		total += amount
+	}
+	return total
 }

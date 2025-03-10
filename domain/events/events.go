@@ -173,7 +173,7 @@ type PlayerTurnStarted struct {
 	HandID    string
 	PlayerID  string
 	Phase     string
-	TimeoutAt int64 // Unix timestamp
+	TimeoutAt time.Time
 	At        time.Time
 }
 
