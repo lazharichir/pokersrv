@@ -5,7 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lazharichir/poker/cards"
 	"github.com/lazharichir/poker/domain/events"
+	"github.com/lazharichir/poker/domain/hands"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -51,8 +53,13 @@ func setupContinuationPhaseHand(numPlayers int) (*Hand, *Table) {
 		TableRules: TableRules{
 			PlayerTimeout: 30 * time.Second,
 		},
-		eventHandlers: []events.EventHandler{},
-		Events:        []events.Event{},
+		eventHandlers:       []events.EventHandler{},
+		Events:              []events.Event{},
+		Deck:                cards.NewDeck52(),
+		CommunitySelections: make(map[string]cards.Stack),
+		CommunityCards:      cards.Stack{},
+		HoleCards:           make(map[string]cards.Stack),
+		AntesPaid:           make(map[string]int),
 	}
 
 	// Set all players as active
@@ -220,8 +227,15 @@ func setupAntesPhaseHand(numPlayers int) (*Hand, *Table) {
 			AnteValue:     10,
 			PlayerTimeout: 30 * time.Second,
 		},
-		eventHandlers: []events.EventHandler{},
-		Events:        []events.Event{},
+		eventHandlers:       []events.EventHandler{},
+		Events:              []events.Event{},
+		Deck:                cards.NewDeck52(),
+		HoleCards:           make(map[string]cards.Stack),
+		CommunityCards:      cards.Stack{},
+		Pot:                 0,
+		Results:             []hands.HandComparisonResult{},
+		ContinuationBets:    make(map[string]int),
+		CommunitySelections: make(map[string]cards.Stack),
 	}
 
 	// Set all players as active
@@ -488,5 +502,304 @@ func TestTransitionToHolePhase(t *testing.T) {
 		// Assert
 		assert.Equal(t, HandPhase_Start, hand.Phase)          // Phase shouldn't change
 		assert.Equal(t, initialEventsCount, len(hand.Events)) // No new events
+	})
+}
+
+func TestDealHoleCards(t *testing.T) {
+	t.Run("Successfully deal hole cards", func(t *testing.T) {
+		// Setup
+		hand, _ := setupAntesPhaseHand(3)
+		hand.Phase = HandPhase_Hole
+
+		// Act
+		err := hand.DealHoleCards()
+		assert.NoError(t, err)
+
+		// Each active player should have 2 cards
+		for playerID, active := range hand.ActivePlayers {
+			if active {
+				assert.Len(t, hand.HoleCards[playerID], 2)
+			}
+		}
+
+		// Check events are emitted
+		_, found := findEventOfType(hand.Events, events.HoleCardsDealt{}.Name())
+		assert.True(t, found)
+
+		// Should transition to continuation phase
+		assert.Equal(t, HandPhase_Continuation, hand.Phase)
+	})
+
+	t.Run("Error when not in hole card phase", func(t *testing.T) {
+		hand, _ := setupAntesPhaseHand(3)
+		err := hand.DealHoleCards() // Don't change to hole phase
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not in hole card phase")
+	})
+}
+
+func TestDealCommunityCard(t *testing.T) {
+	t.Run("Successfully deal community card", func(t *testing.T) {
+		// Setup
+		hand, _ := setupContinuationPhaseHand(3)
+		hand.Phase = HandPhase_CommunityDeal
+		initialCommunityCardCount := len(hand.CommunityCards)
+
+		// Act
+		err := hand.DealCommunityCard()
+
+		// Assert
+		assert.NoError(t, err)
+		assert.Equal(t, initialCommunityCardCount+1, len(hand.CommunityCards))
+
+		// Check event is emitted
+		_, found := findEventOfType(hand.Events, events.CommunityCardDealt{}.Name())
+		assert.True(t, found)
+	})
+
+	t.Run("Transition to community selection after 8 cards", func(t *testing.T) {
+		// Setup
+		hand, _ := setupContinuationPhaseHand(3)
+		hand.Phase = HandPhase_CommunityDeal
+
+		// Add 7 cards
+		for i := 0; i < 7; i++ {
+			hand.CommunityCards = append(hand.CommunityCards, cards.Card{})
+		}
+
+		// Act - deal the 8th card
+		err := hand.DealCommunityCard()
+
+		// Assert
+		assert.NoError(t, err)
+		assert.Equal(t, HandPhase_CommunitySelection, hand.Phase)
+	})
+}
+
+func TestPlayerFolds(t *testing.T) {
+	t.Run("Successfully fold", func(t *testing.T) {
+		// Setup
+		hand, _ := setupContinuationPhaseHand(3)
+		currentBettorID := hand.CurrentBettor
+
+		// Act
+		err := hand.PlayerFolds(currentBettorID)
+
+		// Assert
+		assert.NoError(t, err)
+		assert.False(t, hand.IsPlayerActive(currentBettorID))
+
+		// Check event is emitted
+		event, found := findEventOfType(hand.Events, events.PlayerFolded{}.Name())
+		assert.True(t, found)
+		foldedEvent, ok := event.(events.PlayerFolded)
+		assert.True(t, ok)
+		assert.Equal(t, currentBettorID, foldedEvent.PlayerID)
+	})
+
+	t.Run("Last player standing wins immediately", func(t *testing.T) {
+		// Setup
+		hand, _ := setupContinuationPhaseHand(2)
+		currentBettorID := hand.CurrentBettor
+
+		// Act
+		err := hand.PlayerFolds(currentBettorID)
+
+		// Assert
+		assert.NoError(t, err)
+		assert.Equal(t, HandPhase_Ended, hand.Phase)
+
+		// Check SingleWinnerDetermined event emitted
+		_, found := findEventOfType(hand.Events, events.SingleWinnerDetermined{}.Name())
+		assert.True(t, found)
+	})
+}
+
+func TestPlayerSelectsCommunityCard(t *testing.T) {
+	t.Run("Successfully select card", func(t *testing.T) {
+		// Setup
+		hand, _ := setupContinuationPhaseHand(2)
+		hand.Phase = HandPhase_CommunitySelection
+		hand.CommunitySelectionStartedAt = time.Now()
+		playerID := hand.Players[0].ID
+
+		// Add community card
+		testCard := cards.Card{Suit: cards.Hearts, Value: cards.Ace}
+		hand.CommunityCards = append(hand.CommunityCards, testCard)
+
+		// Act
+		err := hand.PlayerSelectsCommunityCard(playerID, testCard)
+
+		// Assert
+		assert.NoError(t, err)
+		assert.Contains(t, hand.CommunitySelections[playerID], testCard)
+
+		// Check event emitted
+		_, found := findEventOfType(hand.Events, events.CommunityCardSelected{}.Name())
+		assert.True(t, found)
+	})
+
+	t.Run("Error when selecting more than 3 cards", func(t *testing.T) {
+		// Setup
+		hand, _ := setupContinuationPhaseHand(2)
+		hand.Phase = HandPhase_CommunitySelection
+		hand.CommunitySelectionStartedAt = time.Now()
+		playerID := hand.Players[0].ID
+
+		// Add community cards
+		hand.CommunityCards = cards.NewDeck52()[:8]
+
+		// Player already selected 3 cards
+		hand.CommunitySelections[playerID] = hand.CommunityCards[:3]
+
+		// Act
+		err := hand.PlayerSelectsCommunityCard(playerID, hand.CommunityCards[3])
+
+		// Assert
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "already selected 3 cards")
+	})
+}
+
+func TestEvaluateHands(t *testing.T) {
+	t.Run("Correctly determine winner with three-of-a-kind vs two pair", func(t *testing.T) {
+		// Setup: create a hand with 2 players
+		hand, _ := setupContinuationPhaseHand(2)
+		hand.Phase = HandPhase_Decision
+
+		player1ID := hand.Players[0].ID
+		player2ID := hand.Players[1].ID
+
+		// Set up hole cards
+		// Player 1: Ace of Hearts, Ace of Spades (pair of aces)
+		hand.HoleCards[player1ID] = cards.Stack{
+			{Suit: cards.Hearts, Value: cards.Ace},
+			{Suit: cards.Spades, Value: cards.Ace},
+		}
+
+		// Player 2: King of Spades, Queen of Spades
+		hand.HoleCards[player2ID] = cards.Stack{
+			{Suit: cards.Spades, Value: cards.King},
+			{Suit: cards.Spades, Value: cards.Queen},
+		}
+
+		// Set up community cards (available to both players)
+		hand.CommunityCards = cards.Stack{
+			{Suit: cards.Clubs, Value: cards.Ace},      // Third ace for player 1
+			{Suit: cards.Clubs, Value: cards.King},     // King for player 2's pair
+			{Suit: cards.Diamonds, Value: cards.Queen}, // Queen for player 2's pair
+			{Suit: cards.Hearts, Value: cards.King},    // Extra King (not used)
+			{Suit: cards.Hearts, Value: cards.Queen},   // Extra Queen (not used)
+			{Suit: cards.Hearts, Value: cards.Ten},     // Filler card
+			{Suit: cards.Diamonds, Value: cards.Five},  // Filler card
+			{Suit: cards.Clubs, Value: cards.Two},      // Filler card
+		}
+
+		// Player 1 selects: Ace of Clubs, King of Hearts, Queen of Hearts
+		// Will make three-of-a-kind with Aces
+		hand.CommunitySelections[player1ID] = cards.Stack{
+			{Suit: cards.Clubs, Value: cards.Ace},
+			{Suit: cards.Hearts, Value: cards.King},
+			{Suit: cards.Hearts, Value: cards.Queen},
+		}
+
+		// Player 2 selects: King of Clubs, Queen of Diamonds, Ten of Hearts
+		// Will make two pairs: Kings and Queens
+		hand.CommunitySelections[player2ID] = cards.Stack{
+			{Suit: cards.Clubs, Value: cards.King},
+			{Suit: cards.Diamonds, Value: cards.Queen},
+			{Suit: cards.Hearts, Value: cards.Ten},
+		}
+
+		// Mark both players as active
+		hand.ActivePlayers[player1ID] = true
+		hand.ActivePlayers[player2ID] = true
+
+		// Act
+		results, err := hand.EvaluateHands()
+
+		// Assert
+		assert.NoError(t, err)
+		assert.Len(t, results, 2, "Should return results for both players")
+
+		// Find player 1's result
+		var player1Result, player2Result hands.HandComparisonResult
+		for _, result := range results {
+			if result.PlayerID == player1ID {
+				player1Result = result
+			} else if result.PlayerID == player2ID {
+				player2Result = result
+			}
+		}
+
+		// Player 1 should be the winner with three of a kind
+		assert.True(t, player1Result.IsWinner, "Player 1 with three-of-a-kind should be the winner")
+		assert.False(t, player2Result.IsWinner, "Player 2 with two pair should not be the winner")
+
+		// Verify hand ranks
+		assert.Equal(t, hands.ThreeOfAKind, player1Result.HandRank, "Player 1 should have three of a kind")
+		assert.Equal(t, hands.TwoPair, player2Result.HandRank, "Player 2 should have two pair")
+
+		// Verify player 1 has higher rank
+		assert.Greater(t, player1Result.HandRank, player2Result.HandRank, "Three of a kind should rank higher than two pair")
+	})
+}
+
+func TestPayout(t *testing.T) {
+	t.Run("Single winner payout", func(t *testing.T) {
+		// Setup
+		hand, table := setupContinuationPhaseHand(3)
+		hand.Phase = HandPhase_Payout
+		hand.Pot = 300
+
+		// Set up a single winner
+		winnerID := hand.Players[0].ID
+		initialChips := table.GetPlayerBuyIn(winnerID)
+		hand.Results = []hands.HandComparisonResult{
+			{PlayerID: winnerID, IsWinner: true, HandRank: 1},
+		}
+
+		// Act
+		err := hand.Payout()
+
+		// Assert
+		assert.NoError(t, err)
+		assert.Equal(t, initialChips+300, table.GetPlayerBuyIn(winnerID))
+		assert.Equal(t, 0, hand.Pot)
+		assert.Equal(t, HandPhase_Ended, hand.Phase)
+	})
+
+	t.Run("Split pot between multiple winners", func(t *testing.T) {
+		t.Skip("Not implemented yet")
+		// Setup for split pot scenario
+	})
+}
+
+func TestBurnCard(t *testing.T) {
+	t.Run("Successfully burn card", func(t *testing.T) {
+		hand, _ := setupContinuationPhaseHand(2)
+		initialDeckSize := len(hand.Deck)
+
+		err := hand.BurnCard()
+
+		assert.NoError(t, err)
+		assert.Equal(t, initialDeckSize-1, len(hand.Deck))
+	})
+}
+
+func TestCountActivePlayers(t *testing.T) {
+	t.Skip("Not implemented yet")
+	// Test with different active player counts
+}
+
+func TestHandleView(t *testing.T) {
+	t.Run("BuildPlayerView returns correct view", func(t *testing.T) {
+		t.Skip("Not implemented yet")
+		// Test player view construction
+	})
+
+	t.Run("getAvailableActions returns correct actions", func(t *testing.T) {
+		t.Skip("Not implemented yet")
+		// Test available actions in different phases
 	})
 }

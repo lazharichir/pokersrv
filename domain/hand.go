@@ -845,50 +845,51 @@ func (h *Hand) Payout() error {
 		}
 	}
 
-	// If no winners found (shouldn't happen), return error
 	if len(winners) == 0 {
+		// If no winners found (shouldn't happen), return error
 		return errors.New("no winners found")
-	}
-
-	// If one winner found
-	if len(winners) == 1 {
-		return h.awardPayout(winners[0], h.Pot, "winner takes all")
-	}
-
-	// If more than one winner, calculate the amount each winner gets (split pot)
-	winAmount := h.Pot / len(winners)
-	remainder := h.Pot % len(winners)
-
-	// Prepare breakdown for event
-	breakdown := make(map[string]int)
-	for _, winnerID := range winners {
-		breakdown[winnerID] = winAmount
-	}
-
-	// Distribute the pot
-	for _, winnerID := range winners {
-		// Find player index
-		if err := h.awardPayout(winnerID, winAmount, "pot split"); err != nil {
+	} else if len(winners) == 1 {
+		// If one winner found
+		if err := h.awardPayout(winners[0], h.Pot, "winner takes all"); err != nil {
 			return err
 		}
-	}
+	} else {
 
-	// If there's a remainder due to uneven split, give it to first winner
-	// (usually the player closest to the left of the dealer)
-	if remainder > 0 && len(winners) > 0 {
-		if err := h.awardPayout(winners[0], remainder, "remainder payout after pot split"); err != nil {
-			return err
+		// If more than one winner, calculate the amount each winner gets (split pot)
+		winAmount := h.Pot / len(winners)
+		remainder := h.Pot % len(winners)
+
+		// Prepare breakdown for event
+		breakdown := make(map[string]int)
+		for _, winnerID := range winners {
+			breakdown[winnerID] = winAmount
 		}
-		breakdown[winners[0]] += remainder
-	}
 
-	// Emit PotBrokenDown event
-	h.emitEvent(events.PotBrokenDown{
-		TableID:   h.TableID,
-		HandID:    h.ID,
-		Breakdown: breakdown,
-		At:        time.Now(),
-	})
+		// Distribute the pot
+		for _, winnerID := range winners {
+			// Find player index
+			if err := h.awardPayout(winnerID, winAmount, "pot split"); err != nil {
+				return err
+			}
+		}
+
+		// If there's a remainder due to uneven split, give it to first winner
+		// (usually the player closest to the left of the dealer)
+		if remainder > 0 && len(winners) > 0 {
+			if err := h.awardPayout(winners[0], remainder, "remainder payout after pot split"); err != nil {
+				return err
+			}
+			breakdown[winners[0]] += remainder
+		}
+
+		// Emit PotBrokenDown event
+		h.emitEvent(events.PotBrokenDown{
+			TableID:   h.TableID,
+			HandID:    h.ID,
+			Breakdown: breakdown,
+			At:        time.Now(),
+		})
+	}
 
 	// Empty the pot
 	h.Pot = 0
