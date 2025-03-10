@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lazharichir/poker/cards"
+	"github.com/lazharichir/poker/hands"
 )
 
 type EventHandler func(event Event)
@@ -224,7 +225,7 @@ func (c CommunitySelectionEnded) Timestamp() time.Time { return c.At }
 type HandsEvaluated struct {
 	TableID string
 	HandID  string
-	Results map[string]int
+	Results map[string]hands.HandComparisonResult // playerID => HandComparisonResult
 	At      time.Time
 }
 
@@ -242,13 +243,12 @@ func (s ShowdownStarted) Name() string         { return "SHOWDOWN_STARTED" }
 func (s ShowdownStarted) Timestamp() time.Time { return s.At }
 
 type PlayerShowedHand struct {
-	TableID        string
-	HandID         string
-	PlayerID       string
-	HoleCards      cards.Stack
-	CommunityCards cards.Stack
-	Hand           cards.Stack
-	At             time.Time
+	TableID                string
+	HandID                 string
+	PlayerID               string
+	HoleCards              cards.Stack
+	SelectedCommunityCards cards.Stack
+	At                     time.Time
 }
 
 func (p PlayerShowedHand) Name() string         { return "PLAYER_SHOWED_HAND" }

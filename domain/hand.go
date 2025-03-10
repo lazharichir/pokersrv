@@ -731,6 +731,12 @@ func (h *Hand) Payout() error {
 	winAmount := h.Pot / len(winners)
 	remainder := h.Pot % len(winners)
 
+	// Prepare breakdown for event
+	breakdown := make(map[string]int)
+	for _, winnerID := range winners {
+		breakdown[winnerID] = winAmount
+	}
+
 	// Distribute the pot
 	for _, winnerID := range winners {
 		// Find player index
@@ -745,7 +751,16 @@ func (h *Hand) Payout() error {
 		if err := h.awardPayout(winners[0], remainder, "remainder payout after pot split"); err != nil {
 			return err
 		}
+		breakdown[winners[0]] += remainder
 	}
+
+	// Emit PotBrokenDown event
+	h.emitEvent(events.PotBrokenDown{
+		TableID:   h.TableID,
+		HandID:    h.ID,
+		Breakdown: breakdown,
+		At:        time.Now(),
+	})
 
 	// Empty the pot
 	h.Pot = 0
@@ -758,6 +773,17 @@ func (h *Hand) Payout() error {
 
 func (h *Hand) awardPayout(winnerID string, amount int, reason string) error {
 	h.Table.IncreasePlayerBuyIn(winnerID, amount)
+
+	// Emit PotAmountAwarded event
+	h.emitEvent(events.PotAmountAwarded{
+		TableID:  h.TableID,
+		HandID:   h.ID,
+		PlayerID: winnerID,
+		Amount:   amount,
+		Reason:   reason,
+		At:       time.Now(),
+	})
+
 	return nil
 }
 
@@ -831,6 +857,15 @@ func (h *Hand) setPlayerAsInactive(playerID string) {
 func (h *Hand) handleSinglePlayerWin(playerID string) {
 	// Skip to the payout phase directly
 	h.Phase = HandPhase_Payout
+
+	// Emit SingleWinnerDetermined event
+	h.emitEvent(events.SingleWinnerDetermined{
+		TableID:  h.TableID,
+		HandID:   h.ID,
+		PlayerID: playerID,
+		Reason:   "last player standing",
+		At:       time.Now(),
+	})
 
 	// Handle payout logic
 	h.Payout()
@@ -984,19 +1019,59 @@ func (h *Hand) getLastActivePlayer() (Player, error) {
 }
 
 func (h *Hand) increasePot(amount int) {
+	previousAmount := h.Pot
 	h.Pot += amount
+
+	// Emit PotChanged event
+	h.emitEvent(events.PotChanged{
+		TableID:        h.TableID,
+		HandID:         h.ID,
+		PreviousAmount: previousAmount,
+		NewAmount:      h.Pot,
+		At:             time.Now(),
+	})
 }
 
 func (h *Hand) decreasePot(amount int) {
+	previousAmount := h.Pot
 	h.Pot -= amount
+
+	// Emit PotChanged event
+	h.emitEvent(events.PotChanged{
+		TableID:        h.TableID,
+		HandID:         h.ID,
+		PreviousAmount: previousAmount,
+		NewAmount:      h.Pot,
+		At:             time.Now(),
+	})
 }
 
 func (h *Hand) resetPot() {
+	previousAmount := h.Pot
 	h.Pot = 0
+
+	// Emit PotChanged event
+	h.emitEvent(events.PotChanged{
+		TableID:        h.TableID,
+		HandID:         h.ID,
+		PreviousAmount: previousAmount,
+		NewAmount:      h.Pot,
+		At:             time.Now(),
+	})
 }
 
 func (h *Hand) setPot(value int) {
+	previousAmount := h.Pot
 	h.Pot = value
+
+	// Emit PotChanged event
+	h.emitEvent(events.PotChanged{
+		TableID:        h.TableID,
+		HandID:         h.ID,
+		PreviousAmount: previousAmount,
+		NewAmount:      h.Pot,
+		At:             time.Now(),
+	})
 }
 
 func (h *Hand) areAllAntesPaid() bool {
