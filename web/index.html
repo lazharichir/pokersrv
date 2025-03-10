@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poker Game</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+        #container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+        #overlay {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        #lobby {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            width: 300px;
+        }
+        #tables-list {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 800px;
+            display: none;
+        }
+        .table-item {
+            background-color: #333333;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .table-item button {
+            width: auto;
+        }
+        .table-details {
+            text-align: left;
+        }
+        .tables-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .tables-header h2 {
+            margin: 0;
+        }
+        input, button {
+            padding: 10px;
+            margin: 10px 0;
+            width: 100%;
+            border: none;
+            border-radius: 5px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #debug {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            width: 300px;
+            font-family: monospace;
+            font-size: 12px;
+            display: none;
+        }
+        #game-ui {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            z-index: 5;
+        }
+        .action-button {
+            padding: 10px 20px;
+            margin: 0 5px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            display: none;
+        }
+        .action-button:hover {
+            background-color: #45a049;
+        }
+        #player-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    
+    <div id="overlay">
+        <div id="lobby">
+            <h2>Welcome to Poker</h2>
+            <p>Your Player ID: <span id="player-id"></span></p>
+            <input type="text" id="username" placeholder="Enter your username">
+            <button id="enter-lobby">Enter Lobby</button>
+        </div>
+        
+        <div id="tables-list">
+            <div class="tables-header">
+                <h2>Available Tables</h2>
+                <button id="create-table">Create New Table</button>
+            </div>
+            <div id="tables-container">
+                <!-- Tables will be listed here -->
+            </div>
+        </div>
+    </div>
+    
+    <div id="player-info">
+        <div>Player: <span id="display-name"></span></div>
+        <div>Chips: <span id="chips">0</span></div>
+    </div>
+    
+    <div id="game-ui">
+        <button class="action-button" id="ante-button">Place Ante</button>
+        <button class="action-button" id="fold-button">Fold</button>
+        <button class="action-button" id="bet-button">Bet</button>
+        <button class="action-button" id="leave-table-button">Leave Table</button>
+    </div>
+    
+    <div id="debug"></div>
+    
+    <script>
+        // Configuration
+        const VERBOSE = true; // Set to true to enable debug logs
+        const WEBSOCKET_URL = "ws://localhost:7777/ws";
+        const API_BASE = "http://localhost:7777";
+        
+        // Debug logging
+        function log(message, data) {
+            if (VERBOSE) {
+                const timestamp = new Date().toISOString().substr(11, 8);
+                let logMessage = `[${timestamp}] ${message}`;
+                
+                if (data !== undefined) {
+                    console.log(logMessage, data);
+                    logMessage += " " + JSON.stringify(data);
+                } else {
+                    console.log(logMessage);
+                }
+                
+                const debugElement = document.getElementById('debug');
+                if (debugElement) {
+                    debugElement.style.display = 'block';
+                    const logLine = document.createElement('div');
+                    logLine.textContent = logMessage;
+                    debugElement.appendChild(logLine);
+                    debugElement.scrollTop = debugElement.scrollHeight;
+                    
+                    // Keep only the last 50 log messages
+                    while (debugElement.childNodes.length > 50) {
+                        debugElement.removeChild(debugElement.firstChild);
+                    }
+                }
+            }
+        }
+        
+        // Random name generator
+        const adjectives = ['Bold', 'Lucky', 'Quick', 'Smart', 'Clever', 'Witty', 'Calm', 'Brave', 'Sharp', 'Swift'];
+        const nouns = ['Ace', 'King', 'Queen', 'Jack', 'Joker', 'Diamond', 'Club', 'Heart', 'Spade', 'Player'];
+        
+        function generateRandomName() {
+            const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+            const noun = nouns[Math.floor(Math.random() * nouns.length)];
+            return `${adjective}${noun}`;
+        }
+        
+        // Generate a random ID for the player
+        function generatePlayerId() {
+            return 'player_' + Math.random().toString(36).substr(2, 9);
+        }
+        
+        // Game state
+        const gameState = {
+            playerId: generatePlayerId(),
+            playerName: generateRandomName(),
+            connected: false,
+            inLobby: false,
+            currentTable: null,
+            currentHand: null,
+            chips: 0,
+            players: {},
+            tables: [],
+            cards: [],
+            communityCards: []
+        };
+        
+        // Initialize ThreeJS
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x247e47); // Poker table green
+        
+        const camera = new THREE.OrthographicCamera(
+            window.innerWidth / -2, window.innerWidth / 2,
+            window.innerHeight / 2, window.innerHeight / -2,
+            0.1, 1000
+        );
+        camera.position.z = 5;
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('container').appendChild(renderer.domElement);
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.left = window.innerWidth / -2;
+            camera.right = window.innerWidth / 2;
+            camera.top = window.innerHeight / 2;
+            camera.bottom = window.innerHeight / -2;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Create poker table in the 3D scene
+        function createPokerTable() {
+            // Clear existing table
+            while(scene.children.length > 0) { 
+                scene.remove(scene.children[0]); 
+            }
+            
+            // Table
+            const tableGeometry = new THREE.CircleGeometry(300, 32);
+            const tableMaterial = new THREE.MeshBasicMaterial({ color: 0x247e47 });
+            const table = new THREE.Mesh(tableGeometry, tableMaterial);
+            scene.add(table);
+            
+            // Table border
+            const borderGeometry = new THREE.RingGeometry(300, 320, 32);
+            const borderMaterial = new THREE.MeshBasicMaterial({ color: 0x8B4513 });
+            const border = new THREE.Mesh(borderGeometry, borderMaterial);
+            scene.add(border);
+            
+            // Add text for pot
+            const fontLoader = new THREE.TextureLoader();
+            addText("Pot: 0", 0, 0);
+            
+            // Render player positions
+            const numPositions = 6;
+            const radius = 250;
+            
+            for (let i = 0; i < numPositions; i++) {
+                const angle = (i / numPositions) * Math.PI * 2;
+                const x = radius * Math.sin(angle);
+                const y = radius * Math.cos(angle);
+                
+                // Player position
+                const posGeometry = new THREE.CircleGeometry(30, 32);
+                const posMaterial = new THREE.MeshBasicMaterial({ color: 0x333333 });
+                const position = new THREE.Mesh(posGeometry, posMaterial);
+                position.position.set(x, y, 0);
+                position.userData = { positionIndex: i };
+                scene.add(position);
+                
+                // Position label
+                addText(`Seat ${i+1}`, x, y - 50);
+            }
+        }
+        
+        // Helper to add text
+        function addText(message, x, y) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 256;
+            canvas.height = 64;
+            context.fillStyle = '#ffffff';
+            context.font = '24px Arial';
+            context.textAlign = 'center';
+            context.fillText(message, canvas.width / 2, canvas.height / 2);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.MeshBasicMaterial({ 
+                map: texture, 
+                transparent: true,
+                depthWrite: false
+            });
+            const geometry = new THREE.PlaneGeometry(100, 25);
+            const textMesh = new THREE.Mesh(geometry, material);
+            textMesh.position.set(x, y, 0.1);
+            scene.add(textMesh);
+            
+            return textMesh;
+        }
+        
+        // Create a card mesh
+        function createCard(value, suit, x, y) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 128;
+            canvas.height = 192;
+            
+            // Card background
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.strokeStyle = '#000000';
+            context.lineWidth = 2;
+            context.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+            
+            // Card value and suit
+            context.fillStyle = (suit === 'hearts' || suit === 'diamonds') ? '#ff0000' : '#000000';
+            context.font = '24px Arial';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(value, canvas.width / 2, 30);
+            
+            // Simplified suit symbol
+            context.font = '48px Arial';
+            let suitSymbol = '♠'; // spades
+            if (suit === 'hearts') suitSymbol = '♥';
+            else if (suit === 'diamonds') suitSymbol = '♦';
+            else if (suit === 'clubs') suitSymbol = '♣';
+            
+            context.fillText(suitSymbol, canvas.width / 2, canvas.height / 2);
+            
+            // Create texture from canvas
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.MeshBasicMaterial({ 
+                map: texture, 
+                transparent: false,
+                side: THREE.DoubleSide
+            });
+            
+            const geometry = new THREE.PlaneGeometry(60, 90);
+            const card = new THREE.Mesh(geometry, material);
+            card.position.set(x, y, 0.2);
+            card.userData = { value, suit };
+            scene.add(card);
+            
+            return card;
+        }
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        
+        // WebSocket connection
+        let socket = null;
+        
+        function connectWebSocket() {
+            log('Connecting to WebSocket server...', WEBSOCKET_URL);
+            
+            socket = new WebSocket(WEBSOCKET_URL);
+            
+            socket.onopen = function(e) {
+                log('WebSocket connection established');
+                gameState.connected = true;
+            };
+            
+            socket.onmessage = function(event) {
+                try {
+                    if (event.data === "HELLO") {
+                        return;
+                    }
+                    const envelope = JSON.parse(event.data);
+                    log('Message received', envelope);
+                    
+                    // Extract the event name and payload from the envelope
+                    const eventName = envelope.name;
+                    const eventData = envelope.payload;
+                    
+                    // Combine them for handling
+                    const combinedEvent = {
+                        ...eventData,
+                        name: eventName
+                    };
+                    
+                    handleEvent(combinedEvent);
+                } catch (error) {
+                    log('Error parsing message', error);
+                }
+            };
+            
+            socket.onclose = function(event) {
+                if (event.wasClean) {
+                    log(`Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+                } else {
+                    log('Connection died');
+                }
+                gameState.connected = false;
+                
+                // Try to reconnect after 5 seconds
+                setTimeout(connectWebSocket, 5000);
+            };
+            
+            socket.onerror = function(error) {
+                log('WebSocket error', error);
+            };
+        }
+        
+        // Send command to server
+        function sendCommand(commandName, data) {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                log('Cannot send command: WebSocket not connected');
+                return false;
+            }
+            
+            const command = {
+                name: commandName,
+                ...data
+            };
+            
+            log('Sending command', command);
+            socket.send(JSON.stringify(command));
+            return true;
+        }
+        
+        // Handle received events
+        function handleEvent(event) {
+            const eventName = event.name;
+            
+            switch(eventName) {
+                case 'PLAYER_ENTERED_LOBBY':
+                    handlePlayerEnteredLobby(event);
+                    break;
+                case 'PLAYER_LEFT_LOBBY':
+                    handlePlayerLeftLobby(event);
+                    break;
+                case 'PLAYER_JOINED_TABLE':
+                    handlePlayerJoinedTable(event);
+                    break;
+                case 'PLAYER_LEFT_TABLE':
+                    handlePlayerLeftTable(event);
+                    break;
+                case 'PLAYER_CHIPS_CHANGED':
+                    handlePlayerChipsChanged(event);
+                    break;
+                case 'HAND_STARTED':
+                    handleHandStarted(event);
+                    break;
+                case 'PHASE_CHANGED':
+                    handlePhaseChanged(event);
+                    break;
+                case 'HAND_ENDED':
+                    handleHandEnded(event);
+                    break;
+                case 'ANTE_PLACED':
+                    handleAntePlaced(event);
+                    break;
+                case 'PLAYER_FOLDED':
+                    handlePlayerFolded(event);
+                    break;
+                case 'CONTINUATION_BET_PLACED':
+                    handleContinuationBetPlaced(event);
+                    break;
+                case 'COMMUNITY_CARD_SELECTED':
+                    handleCommunityCardSelected(event);
+                    break;
+                case 'HOLE_CARD_DEALT':
+                    handleHoleCardDealt(event);
+                    break;
+                case 'COMMUNITY_CARD_DEALT':
+                    handleCommunityCardDealt(event);
+                    break;
+                case 'PLAYER_TURN_STARTED':
+                    handlePlayerTurnStarted(event);
+                    break;
+                case 'PLAYER_SHOWED_HAND':
+                    handlePlayerShowedHand(event);
+                    break;
+                case 'POT_CHANGED':
+                    handlePotChanged(event);
+                    break;
+                case 'POT_AMOUNT_AWARDED':
+                    handlePotAmountAwarded(event);
+                    break;
+                default:
+                    log('Unhandled event', event);
+            }
+        }
+        
+        // Event handlers
+        function handlePlayerEnteredLobby(event) {
+            if (event.PlayerID === gameState.playerId) {
+                gameState.inLobby = true;
+                document.getElementById('lobby').style.display = 'none';
+                document.getElementById('tables-list').style.display = 'block';
+                document.getElementById('display-name').textContent = gameState.playerName;
+                
+                fetchTables();
+                
+                log('You entered the lobby');
+            } else {
+                log(`Player ${event.PlayerID} entered the lobby`);
+            }
+        }
+        
+        function handlePlayerLeftLobby(event) {
+            if (event.PlayerID === gameState.playerId) {
+                gameState.inLobby = false;
+                log('You left the lobby');
+            } else {
+                log(`Player ${event.PlayerID} left the lobby`);
+            }
+        }
+        
+        function handlePlayerJoinedTable(event) {
+            if (event.UserID === gameState.playerId) {
+                gameState.currentTable = event.TableID;
+                log(`You joined table ${event.TableID}`);
+                createPokerTable();
+            } else {
+                log(`Player ${event.UserID} joined table ${event.TableID}`);
+                // Update the table visualization if needed
+            }
+        }
+        
+        function handlePlayerLeftTable(event) {
+            if (event.UserID === gameState.playerId) {
+                gameState.currentTable = null;
+                log(`You left table ${event.TableID}`);
+            } else {
+                log(`Player ${event.UserID} left table ${event.TableID}`);
+                // Update the table visualization if needed
+            }
+        }
+        
+        function handlePlayerChipsChanged(event) {
+            if (event.UserID === gameState.playerId) {
+                gameState.chips = event.After;
+                document.getElementById('chips').textContent = event.After;
+                log(`Your chips changed from ${event.Before} to ${event.After} (${event.Change > 0 ? '+' : ''}${event.Change})`);
+            } else {
+                log(`Player ${event.UserID} chips changed from ${event.Before} to ${event.After} (${event.Change > 0 ? '+' : ''}${event.Change})`);
+            }
+        }
+        
+        function handleHandStarted(event) {
+            gameState.currentHand = event.HandID;
+            log(`New hand started: ${event.HandID} with players: ${event.Players.join(', ')}`);
+            // Clear previous cards and reset table state
+        }
+        
+        function handlePhaseChanged(event) {
+            log(`Phase changed from ${event.PreviousPhase} to ${event.NewPhase}`);
+            // Update UI based on current phase
+        }
+        
+        function handleHandEnded(event) {
+            log(`Hand ${event.HandID} ended. Winners: ${event.Winners.join(', ')}. Final pot: ${event.FinalPot}`);
+            gameState.currentHand = null;
+            // Reset table state
+        }
+        
+        function handleAntePlaced(event) {
+            log(`Player ${event.PlayerID} placed ante: ${event.Amount}`);
+        }
+        
+        function handlePlayerFolded(event) {
+            log(`Player ${event.PlayerID} folded`);
+        }
+        
+        function handleContinuationBetPlaced(event) {
+            log(`Player ${event.PlayerID} placed bet: ${event.Amount}`);
+        }
+        
+        function handleCommunityCardSelected(event) {
+            log(`Player ${event.PlayerID} selected community card: ${event.Card}`);
+        }
+        
+        function handleHoleCardDealt(event) {
+            if (event.PlayerID === gameState.playerId) {
+                log(`You received hole card: ${event.Card}`);
+                // Display the player's cards
+                // For simplicity in this example, we'll parse a card string like "AS" (Ace of Spades)
+                const value = event.Card.substring(0, 1);
+                const suit = getSuitFromChar(event.Card.substring(1, 2));
+                createCard(value, suit, -40, -150);
+            } else {
+                log(`Player ${event.PlayerID} received a hole card`);
+                // For other players, show card backs
+            }
+        }
+        
+        function getSuitFromChar(char) {
+            switch(char.toUpperCase()) {
+                case 'S': return 'spades';
+                case 'H': return 'hearts';
+                case 'D': return 'diamonds';
+                case 'C': return 'clubs';
+                default: return 'spades';
+            }
+        }
+        
+        function handleCommunityCardDealt(event) {
+            log(`Community card dealt: ${event.Card} at position ${event.CardIndex}`);
+            // Display community card
+            const value = event.Card.substring(0, 1);
+            const suit = getSuitFromChar(event.Card.substring(1, 2));
+            const x = (event.CardIndex - 2) * 70; // Center the cards
+            createCard(value, suit, x, 50);
+        }
+        
+        function handlePlayerTurnStarted(event) {
+            log(`Player ${event.PlayerID}'s turn started in phase ${event.Phase}`);
+            
+            if (event.PlayerID === gameState.playerId) {
+                log('Your turn!');
+                // Show action buttons based on the current phase
+                showActionButtons(event.Phase);
+            } else {
+                // Hide action buttons if it's not your turn
+                hideActionButtons();
+            }
+        }
+        
+        function handlePlayerShowedHand(event) {
+            log(`Player ${event.PlayerID} showed their hand`);
+            // Display the player's cards
+        }
+        
+        function handlePotChanged(event) {
+            log(`Pot changed from ${event.PreviousAmount} to ${event.NewAmount}`);
+            // Update pot display
+        }
+        
+        function handlePotAmountAwarded(event) {
+            log(`${event.Amount} chips awarded to player ${event.PlayerID}. Reason: ${event.Reason}`);
+        }
+        
+        // UI Functions
+        function showActionButtons(phase) {
+            const anteButton = document.getElementById('ante-button');
+            const foldButton = document.getElementById('fold-button');
+            const betButton = document.getElementById('bet-button');
+            
+            // Show/hide buttons based on the current phase
+            switch(phase) {
+                case 'ANTE':
+                    anteButton.style.display = 'inline-block';
+                    foldButton.style.display = 'none';
+                    betButton.style.display = 'none';
+                    break;
+                case 'BETTING':
+                    anteButton.style.display = 'none';
+                    foldButton.style.display = 'inline-block';
+                    betButton.style.display = 'inline-block';
+                    break;
+                default:
+                    anteButton.style.display = 'none';
+                    foldButton.style.display = 'none';
+                    betButton.style.display = 'none';
+            }
+        }
+        
+        function hideActionButtons() {
+            document.getElementById('ante-button').style.display = 'none';
+            document.getElementById('fold-button').style.display = 'none';
+            document.getElementById('bet-button').style.display = 'none';
+        }
+        
+        // Fetch tables from the server
+        function fetchTables() {
+            const tablesUrl = API_BASE + "/api/tables";
+            log('Fetching tables from', tablesUrl);
+            
+            fetch(tablesUrl)
+                .then(response => response.json())
+                .then(tables => {
+                    log('Received tables', tables);
+                    gameState.tables = tables;
+                    displayTables();
+                })
+                .catch(error => {
+                    log('Error fetching tables', error);
+                });
+        }
+        
+        // Display tables in the UI
+        function displayTables() {
+            const container = document.getElementById('tables-container');
+            container.innerHTML = '';
+            
+            if (gameState.tables.length === 0) {
+                container.innerHTML = '<p>No tables available. Create one to start playing!</p>';
+                return;
+            }
+            
+            gameState.tables.forEach(table => {
+                const tableElement = document.createElement('div');
+                tableElement.className = 'table-item';
+                
+                const details = document.createElement('div');
+                details.className = 'table-details';
+                details.innerHTML = `
+                    <h3>${table.name}</h3>
+                    <p>Players: ${table.playerCount}/${table.maxPlayers || 6}</p>
+                    <p>Ante: ${table.anteValue} chips</p>
+                    <p>Status: ${table.status}</p>
+                `;
+                
+                const joinButton = document.createElement('button');
+                joinButton.textContent = 'Join Table';
+                joinButton.addEventListener('click', () => joinTable(table.id));
+                
+                tableElement.appendChild(details);
+                tableElement.appendChild(joinButton);
+                container.appendChild(tableElement);
+            });
+        }
+        
+        // Join a table
+        function joinTable(tableId) {
+            gameState.currentTable = tableId;
+            
+            // First, send PLAYER_SEATS command
+            sendCommand('PLAYER_SEATS', {
+                PlayerID: gameState.playerId,
+                TableID: tableId
+            });
+            
+            // Then, send PLAYER_BUYS_IN command with 10x the ante value
+            // We'll hard-code 100 for now - in a real app you'd get this from the table data
+            sendCommand('PLAYER_BUYS_IN', {
+                PlayerID: gameState.playerId,
+                TableID: tableId,
+                Amount: 100
+            });
+            
+            // Hide tables list and show the game
+            document.getElementById('tables-list').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
+            
+            // Create and show the table
+            createPokerTable();
+        }
+        
+        // Create a new table via API
+        function createTable() {
+            const name = prompt('Enter a name for your table:');
+            if (!name) return;
+            
+            const anteValue = parseInt(prompt('Enter ante value (default: 10):', '10'));
+            
+            const createTableUrl = API_BASE + "/api/tables/create";
+            
+            fetch(createTableUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: name,
+                    anteValue: anteValue || 10
+                })
+            })
+            .then(response => response.json())
+            .then(newTable => {
+                log('Table created', newTable);
+                fetchTables(); // Refresh the tables list
+            })
+            .catch(error => {
+                log('Error creating table', error);
+            });
+        }
+        
+        // Initialize
+        function init() {
+            // Set player ID in UI
+            document.getElementById('player-id').textContent = gameState.playerId;
+            
+            // Set random username in input
+            document.getElementById('username').value = gameState.playerName;
+            
+            // Connect to WebSocket server
+            connectWebSocket();
+            
+            // Additional event listeners
+            document.getElementById('create-table').addEventListener('click', createTable);
+            
+            // Event listeners
+            document.getElementById('enter-lobby').addEventListener('click', function() {
+                const username = document.getElementById('username').value.trim();
+                if (username) {
+                    gameState.playerName = username;
+                }
+                
+                sendCommand('ENTER_LOBBY', {
+                    PlayerID: gameState.playerId,
+                    PlayerName: gameState.playerName
+                });
+            });
+            
+            document.getElementById('ante-button').addEventListener('click', function() {
+                sendCommand('PLAYER_PLACES_ANTE', {
+                    PlayerID: gameState.playerId,
+                    TableID: gameState.currentTable,
+                    HandID: gameState.currentHand,
+                    Amount: 10 // A default ante amount, adjust as needed
+                });
+            });
+            
+            document.getElementById('fold-button').addEventListener('click', function() {
+                sendCommand('PLAYER_FOLDS', {
+                    PlayerID: gameState.playerId,
+                    TableID: gameState.currentTable,
+                    HandID: gameState.currentHand
+                });
+            });
+            
+            document.getElementById('bet-button').addEventListener('click', function() {
+                sendCommand('PLAYER_PLACES_CONTINUATION_BET', {
+                    PlayerID: gameState.playerId,
+                    TableID: gameState.currentTable,
+                    HandID: gameState.currentHand,
+                    Amount: 20 // A default bet amount, adjust as needed
+                });
+            });
+            
+            document.getElementById('leave-table-button').addEventListener('click', function() {
+                if (gameState.currentTable) {
+                    sendCommand('PLAYER_LEAVES_TABLE', {
+                        PlayerID: gameState.playerId,
+                        TableID: gameState.currentTable
+                    });
+                }
+            });
+            
+            // Start animation loop
+            animate();
+        }
+        
+        // Start the game
+        window.onload = init;
+    </script>
+</body>
+</html>
