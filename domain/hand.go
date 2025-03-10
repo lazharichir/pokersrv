@@ -39,7 +39,7 @@ type Hand struct {
 	eventHandlers []events.EventHandler
 
 	//
-	Players        []Player
+	Players        []*Player
 	Deck           cards.Stack
 	CommunityCards cards.Stack
 	HoleCards      map[string]cards.Stack
@@ -1140,12 +1140,12 @@ func (h *Hand) countActivePlayers() int {
 	return count
 }
 
-func (h *Hand) getLastActivePlayer() (Player, error) {
+func (h *Hand) getLastActivePlayer() (*Player, error) {
 	if h.countActivePlayers() == 0 {
-		return Player{}, errors.New("no active players found")
+		return nil, errors.New("no active players found")
 	}
 	if h.countActivePlayers() > 1 {
-		return Player{}, errors.New("more than one active player found")
+		return nil, errors.New("more than one active player found")
 	}
 
 	for _, player := range h.Players {
@@ -1154,7 +1154,7 @@ func (h *Hand) getLastActivePlayer() (Player, error) {
 		}
 	}
 
-	return Player{}, errors.New("no active players found")
+	return nil, errors.New("no active players found")
 }
 
 func (h *Hand) increasePot(amount int) {
@@ -1229,9 +1229,9 @@ func (h *Hand) hasAlreadyPlacedAnte(playerID string) bool {
 	return paid
 }
 
-func (h *Hand) getPlayerByIndex(index int) Player {
+func (h *Hand) getPlayerByIndex(index int) *Player {
 	if index < 0 || index >= len(h.Players) {
-		return Player{}
+		return nil
 	}
 	return h.Players[index]
 }

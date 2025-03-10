@@ -14,6 +14,23 @@ type Event interface {
 	Timestamp() time.Time
 }
 
+// Lobby events
+type PlayerEnteredLobby struct {
+	PlayerID string
+	At       time.Time
+}
+
+func (p PlayerEnteredLobby) Name() string         { return "PLAYER_ENTERED_LOBBY" }
+func (p PlayerEnteredLobby) Timestamp() time.Time { return p.At }
+
+type PlayerLeftLobby struct {
+	PlayerID string
+	At       time.Time
+}
+
+func (p PlayerLeftLobby) Name() string         { return "PLAYER_LEFT_LOBBY" }
+func (p PlayerLeftLobby) Timestamp() time.Time { return p.At }
+
 // Existing events
 type PlayerJoinedTable struct {
 	TableID string

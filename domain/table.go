@@ -21,7 +21,7 @@ func NewTable(name string, rules TableRules) *Table {
 		Events:        []events.Event{},
 		eventHandlers: []events.EventHandler{},
 		Rules:         rules,
-		Players:       []Player{},
+		Players:       []*Player{},
 		Hands:         []Hand{},
 		ActiveHand:    nil,
 	}
@@ -32,7 +32,7 @@ type Table struct {
 	ID         string
 	Name       string
 	Rules      TableRules
-	Players    []Player
+	Players    []*Player
 	Hands      []Hand
 	ActiveHand *Hand
 	Status     TableStatus
@@ -62,7 +62,11 @@ type TableRules struct {
 }
 
 // SeatPlayer adds a player to the table
-func (t *Table) SeatPlayer(player Player) error {
+func (t *Table) SeatPlayer(player *Player) error {
+	if player == nil {
+		return errors.New("player cannot be nil")
+	}
+
 	if t.Status != TableStatusWaiting && t.Status != TableStatusPlaying {
 		return errors.New("can only add players when table is waiting or playing")
 	}
@@ -201,6 +205,17 @@ func (t *Table) AllowPlaying() error {
 	t.Status = TableStatusPlaying
 
 	return nil
+}
+
+// GetHandByID returns a hand by its ID
+func (t *Table) GetHandByID(handID string) (*Hand, error) {
+	for _, h := range t.Hands {
+		if h.ID == handID {
+			return &h, nil
+		}
+	}
+
+	return nil, errors.New("hand not found")
 }
 
 // StartNewHand starts a new hand at the table

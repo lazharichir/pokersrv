@@ -3,17 +3,73 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/lazharichir/poker/domain/events"
 )
 
 // Lobby represents the poker game lobby
 type Lobby struct {
-	tables map[string]*Table
+	tables  map[string]*Table
+	players map[string]*Player
 
 	// Events
 	Events        []events.Event
 	eventHandlers []events.EventHandler
+}
+
+// IsInLobby checks if a player is in the lobby
+func (l *Lobby) IsInLobby(playerID string) bool {
+	if l.players == nil {
+		return false
+	}
+
+	_, exists := l.players[playerID]
+	return exists
+}
+
+// EntersLobby adds a player to the lobby
+func (l *Lobby) EntersLobby(player *Player) error {
+	if player == nil {
+		return errors.New("player is nil")
+	}
+
+	if l.players == nil {
+		l.players = make(map[string]*Player)
+	}
+
+	if _, exists := l.players[player.ID]; exists {
+		return errors.New("player is already in the lobby")
+	}
+
+	l.players[player.ID] = player
+
+	l.emitEvent(events.PlayerEnteredLobby{
+		PlayerID: player.ID,
+		At:       time.Now(),
+	})
+
+	return nil
+}
+
+func (l *Lobby) LeavesLobby(playerID string) error {
+	if l.players == nil {
+		l.players = make(map[string]*Player)
+	}
+
+	_, exists := l.players[playerID]
+	if !exists {
+		return errors.New("player not found")
+	}
+
+	delete(l.players, playerID)
+
+	l.emitEvent(events.PlayerLeftLobby{
+		PlayerID: playerID,
+		At:       time.Now(),
+	})
+
+	return nil
 }
 
 // NewTable creates a new table with the given name and rules

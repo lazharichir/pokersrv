@@ -14,7 +14,8 @@ func TestPlayerSeats(t *testing.T) {
 		Name:   "Test Table",
 		Status: TableStatusWaiting,
 	}
-	player := Player{
+
+	player := &Player{
 		ID:   uuid.NewString(),
 		Name: "Test Player",
 	}
@@ -32,7 +33,7 @@ func TestPlayerSeats(t *testing.T) {
 
 	// Test error when table has ended
 	table.Status = TableStatusEnded
-	newPlayer := Player{
+	newPlayer := &Player{
 		ID:   uuid.NewString(),
 		Name: "Another Player",
 	}
@@ -48,7 +49,7 @@ func TestPlayerBuysIn(t *testing.T) {
 		ID:     uuid.NewString(),
 		Name:   "Test Table",
 		Status: TableStatusWaiting,
-		Players: []Player{
+		Players: []*Player{
 			{
 				ID:      playerID,
 				Name:    "Test Player",
@@ -87,14 +88,14 @@ func TestPlayerBuysIn(t *testing.T) {
 func TestPlayerLeaves(t *testing.T) {
 	// Setup
 	playerID := uuid.NewString()
-	player := Player{
+	player := &Player{
 		ID:   playerID,
 		Name: "Test Player",
 	}
 	table := &Table{
 		ID:      uuid.NewString(),
 		Name:    "Test Table",
-		Players: []Player{player},
+		Players: []*Player{player},
 		BuyIns:  map[string]int{playerID: 500}, // Initialize BuyIns for the player
 	}
 
@@ -124,7 +125,7 @@ func TestAllowPlaying(t *testing.T) {
 	assert.Equal(t, "need at least 2 players to start", err.Error())
 
 	// Add players
-	table.Players = []Player{
+	table.Players = []*Player{
 		{ID: uuid.NewString(), Name: "Player 1"},
 		{ID: uuid.NewString(), Name: "Player 2"},
 	}
@@ -150,7 +151,7 @@ func TestStartNewHand(t *testing.T) {
 		Name:   "Test Table",
 		Status: TableStatusWaiting,
 		Rules:  TableRules{},
-		Players: []Player{
+		Players: []*Player{
 			{ID: uuid.NewString(), Name: "Player 1"},
 			{ID: uuid.NewString(), Name: "Player 2"},
 		},
@@ -182,7 +183,7 @@ func TestFindButtonPosition(t *testing.T) {
 		ID:     uuid.NewString(),
 		Name:   "Test Table",
 		Status: TableStatusPlaying,
-		Players: []Player{
+		Players: []*Player{
 			{ID: uuid.NewString(), Name: "Player 1"},
 			{ID: uuid.NewString(), Name: "Player 2"},
 			{ID: uuid.NewString(), Name: "Player 3"},

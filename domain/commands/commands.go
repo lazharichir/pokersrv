@@ -6,6 +6,19 @@ type Command interface {
 	Name() string
 }
 
+type EnterLobby struct {
+	PlayerID   string
+	PlayerName string
+}
+
+func (e EnterLobby) Name() string { return "ENTER_LOBBY" }
+
+type LeaveLobby struct {
+	PlayerID string
+}
+
+func (l LeaveLobby) Name() string { return "LEAVE_LOBBY" }
+
 type PlayerSeats struct {
 	PlayerID string
 	TableID  string

@@ -30,10 +30,10 @@ func setupContinuationPhaseHand(numPlayers int) (*Hand, *Table) {
 	table := NewTestTable()
 
 	// Create players
-	players := make([]Player, numPlayers)
+	players := make([]*Player, numPlayers)
 	for i := 0; i < numPlayers; i++ {
 		playerID := "player-" + fmt.Sprint(1+i)
-		players[i] = Player{
+		players[i] = &Player{
 			ID:   playerID,
 			Name: "Player " + fmt.Sprint(1+i),
 		}
@@ -205,10 +205,10 @@ func setupAntesPhaseHand(numPlayers int) (*Hand, *Table) {
 	table := NewTestTable()
 
 	// Create players
-	players := make([]Player, numPlayers)
+	players := make([]*Player, numPlayers)
 	for i := 0; i < numPlayers; i++ {
 		playerID := "player-" + fmt.Sprint(1+i)
-		players[i] = Player{
+		players[i] = &Player{
 			ID:   playerID,
 			Name: "Player " + fmt.Sprint(1+i),
 		}
