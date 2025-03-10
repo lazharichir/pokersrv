@@ -1074,7 +1074,7 @@ func (h *Hand) PrintState() string {
 
 	output += "Players:\n"
 	for _, player := range h.Players {
-		output += "  - ID: " + player.ID + ", Name: " + player.Name + ", Chips: " + fmt.Sprint(h.Table.GetlayerBuyIn(player.ID)) + "\n"
+		output += "  - ID: " + player.ID + ", Name: " + player.Name + ", Chips: " + fmt.Sprint(h.Table.GetPlayerBuyIn(player.ID)) + "\n"
 	}
 	output += "\n"
 
@@ -1397,7 +1397,7 @@ func (h *Hand) BuildPlayerView(playerID string) HandView {
 	}
 
 	// Set player's chips
-	view.MyChips = h.Table.GetlayerBuyIn(playerID)
+	view.MyChips = h.Table.GetPlayerBuyIn(playerID)
 
 	// Determine available actions based on game state and player's turn
 	view.AvailableActions = h.getAvailableActions(playerID)
@@ -1411,7 +1411,7 @@ func (h *Hand) BuildPlayerView(playerID string) HandView {
 				ID:        player.ID,
 				Name:      player.Name,
 				Position:  i,
-				Chips:     h.Table.GetlayerBuyIn(player.ID),
+				Chips:     h.Table.GetPlayerBuyIn(player.ID),
 				HasFolded: !h.IsPlayerActive(player.ID),
 				IsActive:  h.IsPlayerActive(player.ID),
 				IsCurrent: h.IsPlayerTheCurrentBettor(player.ID),
