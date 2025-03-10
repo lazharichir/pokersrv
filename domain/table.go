@@ -12,6 +12,21 @@ import (
 	"github.com/sanity-io/litter"
 )
 
+func NewTable(name string, rules TableRules) *Table {
+	return &Table{
+		ID:            uuid.NewString(),
+		Name:          name,
+		Status:        TableStatusWaiting,
+		BuyIns:        make(map[string]int),
+		Events:        []events.Event{},
+		eventHandlers: []events.EventHandler{},
+		Rules:         rules,
+		Players:       []Player{},
+		Hands:         []Hand{},
+		ActiveHand:    nil,
+	}
+}
+
 // Table represents a poker table
 type Table struct {
 	ID         string
