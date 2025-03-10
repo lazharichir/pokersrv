@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/lazharichir/poker/cards"
-	"github.com/lazharichir/poker/hands"
+	"github.com/lazharichir/poker/domain/hands"
 )
 
 type EventHandler func(event Event)
