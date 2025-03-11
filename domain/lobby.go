@@ -160,6 +160,8 @@ func (l *Lobby) CreateTable(name string, maxPlayers int, minBuyIn int) (*Table, 
 	// Create the table
 	table := NewTable(name, rules)
 
+	table.RegisterEventHandler(l.handleTableEvent)
+
 	l.tables[table.ID] = table
 
 	return table, nil
